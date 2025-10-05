@@ -1,0 +1,89 @@
+# Promtail 配置文件
+# 用于收集 PaddleSpeech 服务日志
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # PaddleSpeech 应用日志
+  - job_name: paddlespeech-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: paddlespeech-app
+          service: paddlespeech
+          __path__: /home/paddlespeech/PaddleSpeech/logs/*.log
+
+  # Docker 容器日志
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["logging=promtail"]
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'logstream'
+      - source_labels: ['__meta_docker_container_label_logging_jobname']
+        target_label: 'job'
+
+  # 系统日志
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          __path__: /var/log/syslog
+
+  # Nginx 访问日志
+  - job_name: nginx-access
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx-access
+          service: nginx
+          __path__: /var/log/nginx/access.log
+
+  # Nginx 错误日志
+  - job_name: nginx-error
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx-error
+          service: nginx
+          __path__: /var/log/nginx/error.log
+
+# Pipeline 配置
+pipeline_stages:
+  # JSON 日志解析
+  - json:
+      expressions:
+        timestamp: timestamp
+        level: level
+        message: message
+        service: service
+  
+  # 时间戳解析
+  - timestamp:
+      source: timestamp
+      format: RFC3339Nano
+  
+  # 标签提取
+  - labels:
+      level:
+      service:

@@ -1,0 +1,152 @@
+# PaddleSpeech 统一端口 Docker Compose 配置
+# 基于 Ubuntu 22.04 + CUDA 12.9 的优化部署方案
+# 支持模型持久化和一键初始化测试
+# 采用 PaddleSpeech 原生的8090统一端口设计
+
+services:
+  # PaddleSpeech 主服务
+  paddlespeech-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: paddlespeech:latest
+    container_name: paddlespeech-server
+    restart: unless-stopped
+    
+    # GPU 配置优化
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${DEVICE_COUNT:-1}
+              capabilities: [gpu]
+        limits:
+          memory: ${MEMORY_LIMIT:-8G}
+          cpus: ${CPU_LIMIT:-4}
+    
+    # 环境变量优化（统一端口架构）
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONPATH=/home/paddlespeech/PaddleSpeech
+      - PADDLESPEECH_GPU=true
+      - PADDLESPEECH_DEVICE=gpu
+      - ASR_ENGINE=${ASR_ENGINE:-paddlespeech}
+      - ASR_MODEL=${ASR_MODEL:-conformer_wenetspeech}
+      - TTS_ENGINE=${TTS_ENGINE:-paddlespeech}
+      - TTS_MODEL=${TTS_MODEL:-fastspeech2_csmsc}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8090
+    
+    # 端口映射（多服务端口）
+    ports:
+      - "${SERVER_PORT:-8090}:8090"  # 普通服务端口（ASR+TTS+CLS）
+      - "${STREAMING_ASR_PORT:-8091}:8091"  # 流式ASR服务端口
+      - "${STREAMING_TTS_PORT:-8092}:8092"  # 流式TTS服务端口
+      - "8093:8093"  # 静态文件服务端口
+    
+    # 数据卷挂载（模型、配置、日志的完整挂载策略）
+    volumes:
+      # 模型和缓存目录（持久化存储）
+      - paddlespeech-models:/home/paddlespeech/.paddlespeech  # PaddleSpeech模型目录
+      - paddlespeech-cache:/home/paddlespeech/.cache          # 缓存目录
+      - ./models:/home/paddlespeech/models                    # 外部模型目录（与主机同步）
+      
+      # 服务配置文件（与主机实时同步）
+      - ./conf:/home/paddlespeech/PaddleSpeech/docker/conf  # 服务配置文件
+      - ./entrypoint.sh:/home/paddlespeech/entrypoint.sh   # 入口脚本（支持热更新）
+      - ./static_server.py:/home/paddlespeech/PaddleSpeech/docker/static_server.py  # 静态服务器脚本
+      - ./web:/home/paddlespeech/PaddleSpeech/docker/web    # Web界面文件
+      - ./patch_cors.py:/home/paddlespeech/patch_cors.py   # CORS修补脚本
+      
+      # 日志和运行时数据（与主机实时同步）
+      - ./logs:/home/paddlespeech/PaddleSpeech/logs           # 日志目录（与主机同步）
+      - ./uploads:/home/paddlespeech/PaddleSpeech/uploads     # 上传文件目录
+      - ./outputs:/home/paddlespeech/PaddleSpeech/outputs     # 输出文件目录
+      
+      # 系统挂载（无桌面环境，已移除X11显示挂载）
+    
+    # 网络配置
+    networks:
+      - paddlespeech-network
+    
+    # 健康检查（PaddleSpeech 原生服务）
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/paddlespeech/asr/help"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    
+    # 资源限制优化
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack:
+        soft: 67108864
+        hard: 67108864
+    
+    # 安全配置
+    security_opt:
+      - seccomp:unconfined
+    
+    # IPC 模式
+    ipc: host
+    
+    # 共享内存大小（适配 RTX 5070）
+    shm_size: 4gb
+
+  # Redis 缓存（性能优化）
+  redis:
+    image: redis:7-alpine
+    container_name: paddlespeech-redis
+    restart: unless-stopped
+    
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    
+    volumes:
+      - paddlespeech-redis:/data
+    
+    networks:
+      - paddlespeech-network
+    
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# 网络配置
+networks:
+  paddlespeech-network:
+    driver: bridge
+    name: paddlespeech-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# 数据卷配置（只保留模型和缓存的持久化存储）
+volumes:
+  paddlespeech-models:
+    name: paddlespeech-models
+    driver: local
+  paddlespeech-cache:
+    name: paddlespeech-cache
+    driver: local
+  paddlespeech-redis:
+    name: paddlespeech-redis
+    driver: local

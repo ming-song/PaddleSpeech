@@ -24,7 +24,8 @@ from setuptools import find_packages
 from setuptools import setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
-from setuptools.command.test import test
+# 注释掉已弃用的test导入
+# from setuptools.command.test import test
 
 HERE = Path(os.path.abspath(os.path.dirname(__file__)))
 
@@ -224,7 +225,14 @@ class DevelopCommand(develop):
     def run(self):
         develop.run(self)
         # must after develop.run, or pkg install by shell will not see
-        self.execute(_post_install, (self.install_lib, ), msg="Post Install...")
+        # Handle setuptools version compatibility
+        try:
+            install_dir = self.install_lib
+        except AttributeError:
+            install_dir = getattr(self, 'install_dir', None)
+        
+        if install_dir:
+            self.execute(_post_install, (install_dir,), msg="Post Install...")
 
 
 class InstallCommand(install):
@@ -232,16 +240,8 @@ class InstallCommand(install):
         install.run(self)
 
 
-class TestCommand(test):
-    def finalize_options(self):
-        test.finalize_options(self)
-        self.test_args = []
-        self.test_suite = True
-
-    def run_tests(self):
-        # Run nose ensuring that argv simulates running nosetests directly
-        import nose
-        nose.run_exit(argv=['nosetests', '-w', 'tests'])
+# TestCommand 已被移除，因为setuptools.command.test已弃用
+# 可以使用 python -m pytest 或其他测试工具替代
 
 
 # cmd: python setup.py upload
@@ -358,7 +358,7 @@ setup_info = dict(
         'develop': DevelopCommand,
         'install': InstallCommand,
         'upload': UploadCommand,
-        'test': TestCommand,
+        # 'test': TestCommand,  # 已移除，因为setuptools.command.test已弃用
     },
 
     # Package info

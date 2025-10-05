@@ -54,7 +54,7 @@ def warm_up(engine_and_type: str, warm_up_time: int=3) -> bool:
                     for wav in connection_handler.infer(
                             text=sentence,
                             lang=tts_engine.lang,
-                            am=tts_engine.config.am):
+                            am=tts_engine.config.am, spk_id=0):
                         logger.debug(
                             f"The first response time of the {i} warm up: {connection_handler.first_response_time} s"
                         )

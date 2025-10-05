@@ -1,0 +1,82 @@
+# Prometheus 配置文件
+# 用于监控 PaddleSpeech 服务
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # PaddleSpeech 主服务监控
+  - job_name: 'paddlespeech-main'
+    static_configs:
+      - targets: ['paddlespeech-server:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # ASR 服务监控
+  - job_name: 'paddlespeech-asr'
+    static_configs:
+      - targets: ['paddlespeech-server:8081']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # TTS 服务监控
+  - job_name: 'paddlespeech-tts'
+    static_configs:
+      - targets: ['paddlespeech-server:8082']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Redis 监控
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Nginx 监控
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    metrics_path: '/nginx_status'
+    scrape_interval: 30s
+
+  # 容器监控 (cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+  # 节点监控 (Node Exporter)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # GPU 监控 (NVIDIA DCGM)
+  - job_name: 'nvidia-dcgm'
+    static_configs:
+      - targets: ['dcgm-exporter:9400']
+    scrape_interval: 30s
+
+# 告警规则配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# 远程写入配置 (可选)
+# remote_write:
+#   - url: "http://remote-storage:9201/write"
+
+# 远程读取配置 (可选)  
+# remote_read:
+#   - url: "http://remote-storage:9201/read"

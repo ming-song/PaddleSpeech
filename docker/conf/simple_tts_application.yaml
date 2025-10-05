@@ -1,0 +1,12 @@
+# 简化的流式TTS配置文件
+host: 0.0.0.0
+port: 8092
+protocol: 'http'
+engine_list: ['tts_online']
+
+################################### TTS #########################################
+tts_online:
+    model_type: 'fastspeech2_csmsc'
+    lang: 'zh'
+    device: 'cpu'
+    spk_id: 0

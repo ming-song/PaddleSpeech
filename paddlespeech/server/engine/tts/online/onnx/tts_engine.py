@@ -91,6 +91,21 @@ class TTSServerExecutor(TTSExecutor):
             # create am sess
             self.am_sess = get_sess(self.am_ckpt, am_sess_conf)
 
+        elif am == "fastspeech2_mix_onnx":
+            # get model info for mix model
+            if am_ckpt is None or phones_dict is None:
+                logger.error("For fastspeech2_mix_onnx, please provide am_ckpt and phones_dict explicitly.")
+                raise ValueError("fastspeech2_mix_onnx requires explicit model paths")
+            else:
+                self.am_ckpt = os.path.abspath(am_ckpt[0])
+                self.phones_dict = os.path.abspath(phones_dict)
+                if speaker_dict is not None:
+                    self.speaker_dict = os.path.abspath(speaker_dict)
+                self.am_res_path = os.path.dirname(os.path.abspath(am_ckpt[0]))
+
+            # create am sess for mix model
+            self.am_sess = get_sess(self.am_ckpt, am_sess_conf)
+
         elif am == "fastspeech2_cnndecoder_csmsc_onnx":
             if am_ckpt is None or am_stat is None or phones_dict is None:
                 self.task_resource.set_task_model(
@@ -129,7 +144,7 @@ class TTSServerExecutor(TTSExecutor):
 
             self.am_mu, self.am_std = np.load(self.am_stat)
 
-        logger.debug(f"self.phones_dict: {self.phones_dict}")
+        logger.debug(f"self.phones_dict: {getattr(self, 'phones_dict', 'not set')}")
         logger.debug(f"am model dir: {self.am_res_path}")
         logger.debug("Create am sess successfully.")
 
@@ -168,6 +183,9 @@ class TTSServerExecutor(TTSExecutor):
 
         elif lang == 'en':
             self.frontend = English(phone_vocab_path=self.phones_dict)
+        elif lang == 'mix':
+            from paddlespeech.t2s.frontend.mix_frontend import MixFrontend
+            self.frontend = MixFrontend(phone_vocab_path=self.phones_dict)
         logger.debug("frontend done!")
 
 
@@ -186,6 +204,29 @@ class TTSEngine(BaseEngine):
     def init(self, config: dict) -> bool:
         self.executor = TTSServerExecutor()
         self.config = config
+
+        # 处理字典配置，提供兼容性
+        if isinstance(config, dict):
+            # 创建一个配置对象以兼容原始代码，递归处理嵌套字典
+            class Config:
+                def __init__(self, config_dict):
+                    self._dict = config_dict
+                    for key, value in config_dict.items():
+                        if isinstance(value, dict):
+                            setattr(self, key, Config(value))
+                        else:
+                            setattr(self, key, value)
+
+                def get(self, key, default=None):
+                    return self._dict.get(key, default)
+
+                def __getitem__(self, key):
+                    return self._dict[key]
+
+                def __contains__(self, key):
+                    return key in self._dict
+            self.config = Config(config)
+
         self.lang = self.config.lang
         self.engine_type = "online-onnx"
 
@@ -198,7 +239,8 @@ class TTSEngine(BaseEngine):
 
         assert (
             self.config.am == "fastspeech2_csmsc_onnx" or
-            self.config.am == "fastspeech2_cnndecoder_csmsc_onnx"
+            self.config.am == "fastspeech2_cnndecoder_csmsc_onnx" or
+            self.config.am == "fastspeech2_mix_onnx"
         ) and (
             self.config.voc == "hifigan_csmsc_onnx" or
             self.config.voc == "mb_melgan_csmsc_onnx"
@@ -232,26 +274,35 @@ class TTSEngine(BaseEngine):
             return False
 
         try:
-            self.executor._init_from_path(
-                am=self.config.am,
-                am_ckpt=self.config.am_ckpt,
-                am_stat=self.config.am_stat,
-                phones_dict=self.config.phones_dict,
-                tones_dict=self.config.tones_dict,
-                speaker_dict=self.config.speaker_dict,
-                am_sample_rate=self.config.am_sample_rate,
-                am_sess_conf=self.config.am_sess_conf,
-                voc=self.config.voc,
-                voc_ckpt=self.config.voc_ckpt,
-                voc_sample_rate=self.config.voc_sample_rate,
-                voc_sess_conf=self.config.voc_sess_conf,
-                lang=self.config.lang)
+            # 构建参数字典，只传递存在的配置项
+            init_params = {
+                'am': self.config.am,
+                'am_ckpt': getattr(self.config, 'am_ckpt', None),
+                'phones_dict': getattr(self.config, 'phones_dict', None),
+                'am_sample_rate': self.config.am_sample_rate,
+                'am_sess_conf': self.config.am_sess_conf,
+                'voc': self.config.voc,
+                'voc_ckpt': getattr(self.config, 'voc_ckpt', None),
+                'voc_sample_rate': self.config.voc_sample_rate,
+                'voc_sess_conf': self.config.voc_sess_conf,
+                'lang': self.config.lang
+            }
+
+            # 添加可选参数（如果存在）
+            if hasattr(self.config, 'am_stat'):
+                init_params['am_stat'] = self.config.am_stat
+            if hasattr(self.config, 'tones_dict'):
+                init_params['tones_dict'] = self.config.tones_dict
+            if hasattr(self.config, 'speaker_dict'):
+                init_params['speaker_dict'] = self.config.speaker_dict
+
+            self.executor._init_from_path(**init_params)
 
         except Exception as e:
             logger.error("Failed to get model related files.")
             logger.error("Initialize TTS server engine Failed on device: %s." %
                          (self.config.voc_sess_conf.device))
-            logger(e)
+            logger.error(e)
             return False
 
         logger.info("Initialize TTS server engine successfully on device: %s." %
@@ -314,7 +365,7 @@ class PaddleTTSConnectionHandler:
         get_tone_ids = False
         merge_sentences = False
 
-        # front 
+        # front
         frontend_st = time.time()
         if lang == 'zh':
             input_ids = self.executor.frontend.get_input_ids(
@@ -328,8 +379,12 @@ class PaddleTTSConnectionHandler:
             input_ids = self.executor.frontend.get_input_ids(
                 text, merge_sentences=merge_sentences)
             phone_ids = input_ids["phone_ids"]
+        elif lang == 'mix':
+            input_ids = self.executor.frontend.get_input_ids(
+                text, merge_sentences=merge_sentences)
+            phone_ids = input_ids["phone_ids"]
         else:
-            logger.error("lang should in {'zh', 'en'}!")
+            logger.error("lang should in {'zh', 'en', 'mix'}!")
         frontend_et = time.time()
         self.frontend_time = frontend_et - frontend_st
 
@@ -339,9 +394,15 @@ class PaddleTTSConnectionHandler:
 
             # fastspeech2_csmsc
             if am == "fastspeech2_csmsc_onnx":
-                # am 
+                # am
                 mel = self.executor.am_sess.run(
                     output_names=None, input_feed={'text': part_phone_ids})
+            elif am == "fastspeech2_mix_onnx":
+                # am with speaker id for mix model
+                import numpy as np
+                spk_id_tensor = np.array([spk_id], dtype=np.int64)
+                mel = self.executor.am_sess.run(
+                    output_names=None, input_feed={'text': part_phone_ids, 'spk_id': spk_id_tensor})
                 mel = mel[0]
                 if first_flag == 1:
                     first_am_et = time.time()
@@ -366,7 +427,7 @@ class PaddleTTSConnectionHandler:
 
                     yield sub_wav
 
-            # fastspeech2_cnndecoder_csmsc 
+            # fastspeech2_cnndecoder_csmsc
             elif am == "fastspeech2_cnndecoder_csmsc_onnx":
                 # am 
                 orig_hs = self.executor.am_encoder_infer_sess.run(

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS测试页面</h1>
+    <input type="file" id="testFile" accept="audio/*">
+    <button onclick="testCORS()">测试文件上传</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testCORS() {
+            const fileInput = document.getElementById('testFile');
+            const resultDiv = document.getElementById('result');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<span style="color: red;">请先选择一个音频文件</span>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('audio', fileInput.files[0]);
+            formData.append('lang', 'zh');
+            
+            try {
+                resultDiv.innerHTML = '正在测试...';
+                console.log('发送请求到:', 'http://localhost:8090/paddlespeech/asr');
+                
+                const response = await fetch('http://localhost:8090/paddlespeech/asr', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    resultDiv.innerHTML = `<span style="color: green;">成功！结果: ${JSON.stringify(result)}</span>`;
+                } else {
+                    resultDiv.innerHTML = `<span style="color: red;">失败: ${response.status} ${response.statusText}</span>`;
+                }
+                
+            } catch (error) {
+                console.error('错误详情:', error);
+                resultDiv.innerHTML = `<span style="color: red;">错误: ${error.message}</span>`;
+            }
+        }
+    </script>
+</body>
+</html>

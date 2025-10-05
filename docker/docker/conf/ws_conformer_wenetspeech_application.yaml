@@ -1,0 +1,19 @@
+# Streaming ASR WebSocket Server配置文件
+host: 0.0.0.0
+port: 8090
+
+# 模型配置
+model: conformer_wenetspeech
+lang: zh
+sample_rate: 16000
+cfg_path: 
+ckpt_path: 
+device: gpu  # cpu或gpu
+
+# 解码配置
+decode_method: attention_rescoring
+force_yes: true
+
+# WebSocket配置
+ping_interval: 20
+ping_timeout: 10

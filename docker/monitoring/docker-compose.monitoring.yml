@@ -1,0 +1,232 @@
+# PaddleSpeech 监控服务 Docker Compose 配置
+# 包含完整的监控堆栈：Prometheus, Grafana, Loki, cAdvisor
+
+version: '3.8'
+
+services:
+  # Prometheus - 指标收集
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: paddlespeech-prometheus
+    restart: unless-stopped
+    
+    ports:
+      - "9090:9090"
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert.rules:/etc/prometheus/alert.rules:ro
+      - paddlespeech-prometheus:/prometheus
+    
+    networks:
+      - paddlespeech-network
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+
+  # Grafana - 监控可视化
+  grafana:
+    image: grafana/grafana:latest
+    container_name: paddlespeech-grafana
+    restart: unless-stopped
+    
+    ports:
+      - "3000:3000"
+    
+    volumes:
+      - paddlespeech-grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    
+    networks:
+      - paddlespeech-network
+    
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+
+  # Loki - 日志聚合
+  loki:
+    image: grafana/loki:latest
+    container_name: paddlespeech-loki
+    restart: unless-stopped
+    
+    ports:
+      - "3100:3100"
+    
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - paddlespeech-loki:/loki
+    
+    networks:
+      - paddlespeech-network
+    
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Promtail - 日志收集器
+  promtail:
+    image: grafana/promtail:latest
+    container_name: paddlespeech-promtail
+    restart: unless-stopped
+    
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - paddlespeech-logs:/home/paddlespeech/PaddleSpeech/logs:ro
+    
+    networks:
+      - paddlespeech-network
+    
+    command: -config.file=/etc/promtail/config.yml
+
+  # cAdvisor - 容器监控
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: paddlespeech-cadvisor
+    restart: unless-stopped
+    
+    ports:
+      - "8080:8080"
+    
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    
+    networks:
+      - paddlespeech-network
+    
+    privileged: true
+    devices:
+      - /dev/kmsg
+
+  # Node Exporter - 系统监控
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: paddlespeech-node-exporter
+    restart: unless-stopped
+    
+    ports:
+      - "9100:9100"
+    
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    
+    networks:
+      - paddlespeech-network
+    
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  # NVIDIA DCGM Exporter - GPU 监控
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:3.1.8-3.1.5-ubuntu20.04
+    container_name: paddlespeech-dcgm-exporter
+    restart: unless-stopped
+    
+    ports:
+      - "9400:9400"
+    
+    networks:
+      - paddlespeech-network
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    cap_add:
+      - SYS_ADMIN
+
+  # Redis Exporter - Redis 监控
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: paddlespeech-redis-exporter
+    restart: unless-stopped
+    
+    ports:
+      - "9121:9121"
+    
+    networks:
+      - paddlespeech-network
+    
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    
+    depends_on:
+      - redis
+
+  # Nginx Exporter - Nginx 监控
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: paddlespeech-nginx-exporter
+    restart: unless-stopped
+    
+    ports:
+      - "9113:9113"
+    
+    networks:
+      - paddlespeech-network
+    
+    command:
+      - '-nginx.scrape-uri=http://nginx:80/nginx_status'
+    
+    depends_on:
+      - nginx
+
+  # AlertManager - 告警管理 (可选)
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: paddlespeech-alertmanager
+    restart: unless-stopped
+    
+    ports:
+      - "9093:9093"
+    
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - paddlespeech-alertmanager:/alertmanager
+    
+    networks:
+      - paddlespeech-network
+    
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+
+# 网络配置
+networks:
+  paddlespeech-network:
+    external: true
+
+# 数据卷配置
+volumes:
+  paddlespeech-prometheus:
+    driver: local
+  paddlespeech-grafana:
+    driver: local
+  paddlespeech-loki:
+    driver: local
+  paddlespeech-logs:
+    driver: local
+  paddlespeech-alertmanager:
+    driver: local

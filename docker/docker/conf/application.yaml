@@ -1,0 +1,61 @@
+# PaddleSpeech 统一服务配置文件
+# 兼容 paddlespeech_client 命令行工具
+# 基于 Ubuntu 22.04 + CUDA 12.9 自建镜像
+
+#################################################################################
+#                             SERVER SETTING                                    #
+#################################################################################
+host: 0.0.0.0
+port: 8090
+
+# 静态文件服务配置
+static_path: "/home/paddlespeech/PaddleSpeech/docker/web"
+static_url_path: "/static"
+
+# The task format in the engin_list is: <speech task>_<engine type>
+# task choices = ['asr_python', 'asr_inference', 'tts_python', 'tts_inference', 'cls_python', 'cls_inference']
+protocol: 'http'
+engine_list: ['asr_python', 'tts_python', 'cls_python']
+
+#################################################################################
+#                                ENGINE CONFIG                                  #
+#################################################################################
+
+################################### ASR #########################################
+################### speech task: asr; engine_type: python #######################
+asr_python:
+    model: 'conformer_wenetspeech'
+    lang: 'zh'
+    sample_rate: 16000
+    cfg_path: # [optional]
+    ckpt_path: # [optional]
+    decode_method: 'attention_rescoring'
+    num_decoding_left_chunks: -1
+    force_yes: True
+    device: gpu  # set 'gpu:id' or 'cpu'
+
+################################### TTS #########################################
+################### speech task: tts; engine_type: python #######################
+tts_python:
+    am: 'fastspeech2_csmsc'
+    am_config: 
+    am_ckpt: 
+    am_stat: 
+    phones_dict: 
+    tones_dict: 
+    speaker_dict: 
+    voc: 'pwgan_csmsc'
+    voc_config: 
+    voc_ckpt: 
+    voc_stat: 
+    lang: 'zh'
+    device: gpu  # set 'gpu:id' or 'cpu'
+
+################################### CLS #########################################
+################### speech task: cls; engine_type: python #######################
+cls_python:
+    model: 'panns_cnn14'
+    cfg_path: # [optional]
+    ckpt_path: # [optional] 
+    label_file: # [optional]
+    device: cpu  # set 'gpu:id' or 'cpu'

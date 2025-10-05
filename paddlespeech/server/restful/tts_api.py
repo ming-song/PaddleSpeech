@@ -104,13 +104,44 @@ def tts(request_body: TTSRequest):
             from paddlespeech.server.engine.tts.python.tts_engine import PaddleTTSConnectionHandler
         elif tts_engine.engine_type == "inference":
             from paddlespeech.server.engine.tts.paddleinference.tts_engine import PaddleTTSConnectionHandler
+        elif tts_engine.engine_type == "online-onnx":
+            from paddlespeech.server.engine.tts.online.onnx.tts_engine import PaddleTTSConnectionHandler
         else:
-            logger.error("Offline tts engine only support python or inference.")
+            logger.error("Offline tts engine only support python, inference, or online-onnx.")
             sys.exit(-1)
 
         connection_handler = PaddleTTSConnectionHandler(tts_engine)
-        lang, target_sample_rate, duration, wav_base64 = connection_handler.run(
-            text, spk_id, speed, volume, sample_rate, save_path)
+
+        if tts_engine.engine_type == "online-onnx":
+            # ONNX引擎返回流式音频块，需要合并所有块
+            import base64
+            import numpy as np
+
+            wav_chunks = []
+            for wav_base64 in connection_handler.run(text, spk_id):
+                # 解码base64数据为PCM音频
+                wav_bytes = base64.b64decode(wav_base64)
+                wav_array = np.frombuffer(wav_bytes, dtype=np.int16)
+                wav_chunks.append(wav_array)
+
+            if wav_chunks:
+                # 合并所有音频块
+                wav_all = np.concatenate(wav_chunks, axis=0)
+                # 重新编码为base64
+                wav_base64 = base64.b64encode(wav_all.tobytes()).decode('utf8')
+            else:
+                wav_base64 = ""
+
+            # 设置返回值以匹配期望的格式
+            lang = tts_engine.config.lang
+            target_sample_rate = tts_engine.config.am_sample_rate
+            # 计算实际时长
+            total_samples = sum(len(chunk) for chunk in wav_chunks) if wav_chunks else 0
+            duration = total_samples / target_sample_rate if total_samples > 0 else 0
+        else:
+            # Python和Inference引擎支持完整参数
+            lang, target_sample_rate, duration, wav_base64 = connection_handler.run(
+                text, spk_id, speed, volume, sample_rate, save_path)
 
         response = {
             "success": True,

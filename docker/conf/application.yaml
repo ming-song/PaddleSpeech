@@ -1,0 +1,98 @@
+# PaddleSpeech 统一服务配置文件
+# 兼容 paddlespeech_client 命令行工具
+# 基于 Ubuntu 22.04 + CUDA 12.9 自建镜像
+
+#################################################################################
+#                             SERVER SETTING                                    #
+#################################################################################
+host: 0.0.0.0
+port: 8090
+
+# 静态文件服务配置
+static_path: "/home/songm/code/PaddleSpeech/docker/web"
+static_url_path: "/static"
+
+# The task format in the engin_list is: <speech task>_<engine type>
+# task choices = ['asr_python', 'asr_inference', 'tts_python', 'tts_inference', 'cls_python', 'cls_inference']
+# 使用ONNX推理引擎支持混合语音模型
+protocol: 'http'
+engine_list: ['asr_python', 'tts_online-onnx', 'cls_python']
+
+#################################################################################
+#                                ENGINE CONFIG                                  #
+#################################################################################
+
+################################### ASR #########################################
+################### speech task: asr; engine_type: python #######################
+asr_python:
+    model: 'conformer_wenetspeech'  # 支持中文ASR
+    lang: 'zh'
+    sample_rate: 16000
+    cfg_path: # [optional]
+    ckpt_path: # [optional]
+    decode_method: 'attention_rescoring'
+    num_decoding_left_chunks: -1
+    force_yes: True
+    device: gpu  # set 'gpu:id' or 'cpu'
+
+
+################################### TTS #########################################
+################### speech task: tts; engine_type: python #######################
+tts_python:
+    # 使用AISHELL3多说话人模型，支持174个不同音色
+    am: 'fastspeech2_aishell3'  # 支持多说话人的声学模型
+    am_config:
+    am_ckpt:
+    am_stat:
+    phones_dict:
+    tones_dict:
+    speaker_dict:
+    voc: 'pwgan_aishell3'  # 与AISHELL3模型匹配的声码器
+    voc_config:
+    voc_ckpt:
+    voc_stat:
+    lang: 'zh'  # 中文语言
+    device: gpu  # set 'gpu:id' or 'cpu'
+
+################################### TTS ONNX ####################################
+################### speech task: tts; engine_type: online-onnx ###################
+tts_online-onnx:
+    # 使用中英混合ONNX模型，支持283个音色
+    am: 'fastspeech2_mix_onnx'  # 支持中英混合的多说话人声学模型
+    am_ckpt:
+        - '/home/paddlespeech/models/mix_models/fastspeech2_mix_onnx_0.2.0/fastspeech2_mix.onnx'
+    phones_dict: '/home/paddlespeech/models/mix_models/fastspeech2_mix_onnx_0.2.0/phone_id_map.txt'
+    speaker_dict: '/home/paddlespeech/models/mix_models/fastspeech2_mix_onnx_0.2.0/speaker_id_map.txt'
+    am_sample_rate: 24000
+    am_sess_conf:
+        device: "gpu:0"
+        use_trt: False
+        cpu_threads: 4
+
+    # 使用兼容的MB-MelGAN声码器
+    voc: 'mb_melgan_csmsc_onnx'
+    voc_ckpt: '/home/paddlespeech/models/mix_models/mb_melgan_csmsc_onnx_0.2.0/mb_melgan_csmsc.onnx'
+    voc_sample_rate: 24000
+    voc_sess_conf:
+        device: "gpu:0"
+        use_trt: False
+        cpu_threads: 4
+
+    lang: 'mix'  # 中英混合语言
+    device: gpu  # set 'gpu:id' or 'cpu'
+
+    # 流式推理参数（online-onnx引擎需要）
+    am_block: 72
+    am_pad: 12
+    voc_block: 36
+    voc_pad: 14
+    voc_upsample: 300
+
+################################### CLS #########################################
+################### speech task: cls; engine_type: python #######################
+cls_python:
+    model: 'panns_cnn14'
+    cfg_path: # [optional]
+    ckpt_path: # [optional] 
+    label_file: # [optional]
+    device: cpu  # set 'gpu:id' or 'cpu'

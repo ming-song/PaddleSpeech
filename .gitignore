@@ -18,6 +18,34 @@ build
 .history
 .idea
 
+# Python 缓存和临时文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+.tox/
+.cache
+.mypy_cache/
+
+# 环境配置文件
+.env
+.python-version
+*.env
+.env.local
+.env.*.local
+
+# Docker 相关忽略文件
+docker/cache/
+docker/logs/
+docker/models/
+docker/outputs/
+docker/uploads/
+docker/Dockerfile.backup
+docker/Dockerfile.new
+docker/*.backup
+
 audio/dist/
 audio/fc_patch/
 
@@ -25,6 +53,7 @@ docs/build/
 docs/topic/ctc/warp-ctc/
 
 tools/venv
+venv/
 tools/kenlm
 tools/sox-14.4.2
 tools/soxbindings

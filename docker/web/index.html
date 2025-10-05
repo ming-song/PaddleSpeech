@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaddleSpeech 语音服务测试平台</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.ico">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 PaddleSpeech 语音服务测试平台</h1>
+            <p>支持实时录音识别、文件上传转换、语音合成等功能</p>
+        </div>
+
+        <div class="service-tabs">
+            <button class="tab-button active" onclick="switchTab('realtime-asr')">实时语音识别</button>
+            <button class="tab-button" onclick="switchTab('file-asr')">文件语音识别</button>
+            <button class="tab-button" onclick="switchTab('tts')">语音合成</button>
+            <button class="tab-button" onclick="switchTab('streaming-tts')">流式语音合成</button>
+        </div>
+
+        <!-- 实时语音识别面板 -->
+        <div id="realtime-asr" class="service-panel active">
+            <h2 class="panel-title">🎙️ 实时语音识别 (WebSocket)</h2>
+            
+            <div class="service-info">
+                <h4>服务信息</h4>
+                <ul>
+                    <li>服务端口: 8091 (WebSocket)</li>
+                    <li>支持模型: Conformer + WeNet</li>
+                    <li>语言: 中文</li>
+                    <li>采样率: 16kHz</li>
+                </ul>
+            </div>
+
+            <div class="form-group">
+                <label>连接状态</label>
+                <div id="ws-status" class="status-indicator status-warning">未连接</div>
+            </div>
+
+            <div class="button-group">
+                <button id="connect-btn" class="btn btn-primary" onclick="connectWebSocket()">连接服务</button>
+                <button id="start-record-btn" class="btn btn-secondary" onclick="startRecording()" disabled>开始录音</button>
+                <button id="stop-record-btn" class="btn btn-danger" onclick="stopRecording()" disabled>停止录音</button>
+            </div>
+
+            <div class="recording-indicator" id="recording-indicator">
+                🔴 正在录音中...
+            </div>
+
+            <div class="result-area">
+                <h3>识别结果</h3>
+                <div id="realtime-result" class="result-text">等待开始录音...</div>
+            </div>
+        </div>
+
+        <!-- 文件语音识别面板 -->
+        <div id="file-asr" class="service-panel">
+            <h2 class="panel-title">📁 文件语音识别</h2>
+            
+            <div class="service-info">
+                <h4>服务信息</h4>
+                <ul>
+                    <li>服务端口: 8090 (HTTP)</li>
+                    <li>支持格式: WAV, MP3, FLAC</li>
+                    <li>支持模型: Conformer, DeepSpeech2</li>
+                    <li>语言: 中文/英文</li>
+                </ul>
+            </div>
+
+            <div class="form-group">
+                <label>选择语言</label>
+                <select id="asr-lang">
+                    <option value="zh">中文</option>
+                    <option value="en">英文</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>上传音频文件</label>
+                <div class="file-upload-area" onclick="document.getElementById('audio-file').click()">
+                    <p>📤 点击选择或拖拽音频文件到此处</p>
+                    <small>支持 WAV, MP3, FLAC 格式，最大 50MB</small>
+                </div>
+                <input type="file" id="audio-file" accept=".wav,.mp3,.flac" style="display: none;">
+                <div id="file-info" class="file-info"></div>
+            </div>
+
+            <div class="button-group">
+                <button id="upload-asr-btn" class="btn btn-primary" onclick="uploadForASR()" disabled>开始识别</button>
+            </div>
+
+            <div class="result-area">
+                <h3>识别结果</h3>
+                <div id="file-asr-result" class="result-text">请选择音频文件进行识别...</div>
+            </div>
+        </div>
+
+        <!-- 语音合成面板 -->
+        <div id="tts" class="service-panel">
+            <h2 class="panel-title">🗣️ 语音合成</h2>
+            
+            <div class="service-info">
+                <h4>服务信息</h4>
+                <ul>
+                    <li>服务端口: 8090 (HTTP)</li>
+                    <li>支持模型: FastSpeech2 Mix + MelGAN (ONNX优化)</li>
+                    <li>语言: 中英混合</li>
+                    <li>说话人: 283个 (174个中文+109个英文)</li>
+                    <li>输出格式: WAV (24kHz)</li>
+                </ul>
+            </div>
+
+            <div class="form-group">
+                <label>音色选择</label>
+                <div class="speaker-selection">
+                    <select id="speaker-select" onchange="updateSpeakerInfo()">
+                        <option value="174">baker_corpus - 中文女声</option>
+                        <option value="175">ljspeech_corpus - 英文女声</option>
+                        <option value="0">SSB0005 - 女性 青年 标准普通话</option>
+                        <option value="1">SSB0009 - 男性 青年 标准普通话</option>
+                        <option value="2">SSB0011 - 女性 中年 标准普通话</option>
+                        <option value="10">SSB0073 - 男性 青年 标准普通话</option>
+                        <option value="20">SSB0219 - 女性 青年 标准普通话</option>
+                        <option value="30">SSB0338 - 男性 中年 标准普通话</option>
+                        <option value="40">SSB0405 - 女性 青年 标准普通话</option>
+                        <option value="50">SSB0486 - 男性 青年 标准普通话</option>
+                        <option value="60">SSB0545 - 女性 中年 标准普通话</option>
+                        <option value="70">SSB0600 - 男性 青年 标准普通话</option>
+                        <option value="80">SSB0688 - 女性 青年 标准普通话</option>
+                        <option value="90">SSB0756 - 男性 中年 标准普通话</option>
+                        <option value="100">SSB0825 - 女性 青年 标准普通话</option>
+                        <option value="110">SSB0898 - 男性 青年 标准普通话</option>
+                        <option value="120">SSB0968 - 女性 中年 标准普通话</option>
+                        <option value="130">SSB1038 - 男性 青年 标准普通话</option>
+                        <option value="140">SSB1108 - 女性 青年 标准普通话</option>
+                        <option value="150">SSB1178 - 男性 中年 标准普通话</option>
+                        <option value="160">SSB1248 - 女性 青年 标准普通话</option>
+                        <option value="170">SSB1318 - 男性 青年 标准普通话</option>
+                        <option value="176">p225 - 英文女声</option>
+                        <option value="177">p226 - 英文男声</option>
+                        <option value="178">p227 - 英文男声</option>
+                        <option value="179">p228 - 英文女声</option>
+                        <option value="180">p229 - 英文女声</option>
+                    </select>
+                    <button type="button" id="show-all-speakers" onclick="showAllSpeakers()">显示全部283个音色</button>
+                </div>
+                <div id="speaker-info" class="speaker-info">
+                    <strong>当前选择:</strong> baker_corpus - 女性，青年，标准普通话，中文女声，音质清晰
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>播放速度</label>
+                <div class="speed-control">
+                    <input type="range" id="playback-speed" min="0.25" max="2.0" step="0.25" value="1.0">
+                    <span id="speed-value">1.0x</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>输入文本</label>
+                <textarea id="tts-text" rows="4" placeholder="请输入要合成的文本...">你好，欢迎使用PaddleSpeech混合语言合成服务! Welcome to use mixed language TTS!</textarea>
+            </div>
+
+            <div class="button-group">
+                <button id="synthesize-btn" class="btn btn-primary" onclick="synthesizeText()">开始合成</button>
+            </div>
+
+            <div class="result-area">
+                <h3>合成结果</h3>
+                <div id="tts-result" class="result-text">
+                    <p>请输入文本进行语音合成...</p>
+                </div>
+                <audio id="tts-audio" controls style="width: 100%; margin-top: 15px; display: none;"></audio>
+            </div>
+        </div>
+
+        <!-- 流式语音合成面板 -->
+        <div id="streaming-tts" class="service-panel">
+            <h2 class="panel-title">🎵 流式语音合成</h2>
+            
+            <div class="service-info">
+                <h4>服务信息</h4>
+                <ul>
+                    <li>服务端口: 8092 (WebSocket)</li>
+                    <li>支持模型: FastSpeech2 Mix + MelGAN (ONNX优化)</li>
+                    <li>语言: 中英混合</li>
+                    <li>说话人: 283个 (174个中文+109个英文)</li>
+                    <li>特点: 低延迟、流式输出、多音色</li>
+                </ul>
+            </div>
+
+            <div class="form-group">
+                <label>连接状态</label>
+                <div id="tts-ws-status" class="status-indicator status-warning">未连接</div>
+            </div>
+
+            <div class="form-group">
+                <label>音色选择</label>
+                <div class="speaker-selection">
+                    <select id="streaming-speaker-select" onchange="updateStreamingSpeakerInfo()">
+                        <option value="174">baker_corpus - 中文女声</option>
+                        <option value="175">ljspeech_corpus - 英文女声</option>
+                        <option value="0">SSB0005 - 女性 青年 标准普通话</option>
+                        <option value="1">SSB0009 - 男性 青年 标准普通话</option>
+                        <option value="2">SSB0011 - 女性 中年 标准普通话</option>
+                        <option value="10">SSB0073 - 男性 青年 标准普通话</option>
+                        <option value="20">SSB0219 - 女性 青年 标准普通话</option>
+                        <option value="176">p225 - 英文女性</option>
+                        <option value="177">p226 - 英文男性</option>
+                        <option value="178">p227 - 英文男性</option>
+                        <option value="179">p228 - 英文女性</option>
+                        <option value="180">p229 - 英文女性</option>
+                    </select>
+                    <button type="button" id="show-all-streaming-speakers" onclick="showAllStreamingSpeakers()">显示全部283个音色</button>
+                </div>
+                <div id="streaming-speaker-info" class="speaker-info">
+                    <strong>当前选择:</strong> baker_corpus - 中文女声，标准普通话
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>输入文本</label>
+                <textarea id="streaming-tts-text" rows="4" placeholder="请输入要合成的文本，支持中英混合...">这是流式语音合成测试，支持中英混合 like this sentence。</textarea>
+            </div>
+
+            <div class="button-group">
+                <button id="tts-connect-btn" class="btn btn-primary" onclick="connectTTSWebSocket()">连接服务</button>
+                <button id="streaming-synthesize-btn" class="btn btn-secondary" onclick="streamingSynthesize()" disabled>流式合成</button>
+            </div>
+
+            <div class="result-area">
+                <h3>流式合成结果</h3>
+                <div id="streaming-tts-result" class="result-text">
+                    <p>请输入文本进行流式语音合成...</p>
+                </div>
+                <audio id="streaming-tts-audio" controls style="width: 100%; margin-top: 15px; display: none;"></audio>
+            </div>
+        </div>
+    </div>
+
+    <!-- 音色选择模态框 -->
+    <div id="speaker-modal" class="speaker-modal">
+        <div class="speaker-modal-content">
+            <span class="close" onclick="closeSpeakerModal()">&times;</span>
+            <h2>选择音色 (AISHELL3 数据集 - 174个说话人)</h2>
+            <p>包含不同性别、年龄组的标准普通话说话人</p>
+            <div id="speaker-grid" class="speaker-grid">
+                <!-- 音色卡片将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
