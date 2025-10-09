@@ -99,10 +99,10 @@ RUN . ../venv/bin/activate && \
 # 编译安装 CTC 解码器
 RUN . ../venv/bin/activate && \
     cd third_party/ctc_decoders && \
-    # 确保OpenFST库和头文件路径正确
-    export CPLUS_INCLUDE_PATH=/usr/include/fst:$CPLUS_INCLUDE_PATH && \
-    export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LIBRARY_PATH && \
-    export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && \
+    # 移除系统OpenFST路径，避免与项目自带的OpenFST冲突
+    unset CPLUS_INCLUDE_PATH && \
+    unset LIBRARY_PATH && \
+    unset LD_LIBRARY_PATH && \
     bash setup.sh && \
     python -m pip install .
 

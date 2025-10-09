@@ -18,7 +18,6 @@ import multiprocessing.pool
 import os
 import platform
 import sys
-import subprocess
 
 import setuptools
 from distutils import ccompiler
@@ -113,51 +112,17 @@ if compile_test('lzma.h', 'lzma'):
 
 os.system('swig -python -c++ ./decoders.i')
 
-# 添加系统OpenFST支持
-include_dirs = [
-    '.',
-    'kenlm',
-    'openfst-1.6.3/src/include',
-    'ThreadPool',
-]
-
-# 尝试添加系统安装的OpenFST路径
-try:
-    # 获取系统OpenFST包含路径
-    result = subprocess.run(['pkg-config', '--cflags-only-I', 'fst'], 
-                          capture_output=True, text=True, check=True)
-    system_include_paths = result.stdout.strip().replace('-I', '').split()
-    include_dirs.extend(system_include_paths)
-    
-    # 获取系统OpenFST库路径
-    result = subprocess.run(['pkg-config', '--libs-only-L', 'fst'], 
-                          capture_output=True, text=True, check=True)
-    system_lib_paths = result.stdout.strip().replace('-L', '').split()
-    if system_lib_paths:
-        # 设置库路径环境变量
-        ld_library_path = os.environ.get('LD_LIBRARY_PATH', '')
-        for lib_path in system_lib_paths:
-            if lib_path not in ld_library_path:
-                ld_library_path = lib_path + ':' + ld_library_path
-        os.environ['LD_LIBRARY_PATH'] = ld_library_path
-        
-    # 获取系统OpenFST库名
-    result = subprocess.run(['pkg-config', '--libs-only-l', 'fst'], 
-                          capture_output=True, text=True, check=True)
-    system_libs = result.stdout.strip().replace('-l', '').split()
-    LIBS.extend(system_libs)
-    
-except subprocess.CalledProcessError:
-    # 如果pkg-config失败，添加默认路径
-    include_dirs.append('/usr/include/fst')
-    LIBS.extend(['fst', 'fstscript', 'fstsymbols', 'fstspecial'])
-
 decoders_module = [
     Extension(
         name='_paddlespeech_ctcdecoders',
         sources=FILES + glob.glob('*.cxx') + glob.glob('*.cpp'),
         language='c++',
-        include_dirs=include_dirs,
+        include_dirs=[
+            '.',
+            'kenlm',
+            'openfst-1.6.3/src/include',
+            'ThreadPool',
+        ],
         libraries=LIBS,
         extra_compile_args=ARGS)
 ]
