@@ -85,14 +85,14 @@ check_config_files() {
 set_permissions() {
     log_info "设置目录权限..."
     
-    # 确保当前用户对这些目录有读写权限
+    # 设置宽松的权限以确保容器可以读写
     local dirs=("logs" "models" "uploads" "outputs")
     
     for dir in "${dirs[@]}"; do
         local full_path="$PROJECT_ROOT/$dir"
         if [ -d "$full_path" ]; then
-            chmod 755 "$full_path"
-            log_info "设置权限 755: $full_path"
+            chmod 777 "$full_path"
+            log_info "设置权限 777: $full_path"
         fi
     done
 }

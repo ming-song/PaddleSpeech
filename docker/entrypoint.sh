@@ -194,19 +194,14 @@ ensure_log_permissions() {
     mkdir -p logs
     
     # 确保日志目录对当前用户可写
-    chmod 777 logs 2>/dev/null || true
+    chmod 755 logs 2>/dev/null || true
     
     # 如果日志文件存在，确保它们可写
     for file in logs/*.out logs/*.log logs/*.pid; do
         if [ -f "$file" ]; then
-            chmod 666 "$file" 2>/dev/null || true
+            chmod 644 "$file" 2>/dev/null || true
         fi
     done
-    
-    # 确保可以创建新的日志文件
-    touch logs/static.out logs/server.out logs/streaming_asr.out logs/streaming_tts.out 2>/dev/null || true
-    touch logs/static.pid logs/server.pid logs/streaming_asr.pid logs/streaming_tts.pid 2>/dev/null || true
-    chmod 666 logs/*.out logs/*.pid 2>/dev/null || true
 }
 
 # 启动服务（多服务模式）
@@ -226,10 +221,10 @@ start_services() {
     nohup python ./docker/static_server.py 8093 > ./logs/static.out 2>&1 &
     STATIC_PID=$!
     if [ $? -eq 0 ]; then
-        # 确保PID文件可写
-        touch ./logs/static.pid 2>/dev/null || true
-        chmod 666 ./logs/static.pid 2>/dev/null || true
-        echo $STATIC_PID > ./logs/static.pid 2>/dev/null || true
+        # 使用更安全的方式写入PID文件
+        echo $STATIC_PID > ./logs/static.pid 2>/dev/null || {
+            log_warn "无法写入 static.pid 文件"
+        }
         log_info "静态文件服务器已启动 (PID: $STATIC_PID)"
     else
         log_warn "静态文件服务器启动失败，但继续启动其他服务"
@@ -245,10 +240,10 @@ start_services() {
         --log_file ./logs/server.log > ./logs/server.out 2>&1 &
     SERVER_PID=$!
     if [ $? -eq 0 ]; then
-        # 确保PID文件可写
-        touch ./logs/server.pid 2>/dev/null || true
-        chmod 666 ./logs/server.pid 2>/dev/null || true
-        echo $SERVER_PID > ./logs/server.pid 2>/dev/null || true
+        # 使用更安全的方式写入PID文件
+        echo $SERVER_PID > ./logs/server.pid 2>/dev/null || {
+            log_warn "无法写入 server.pid 文件"
+        }
         log_info "普通服务已启动 (PID: $SERVER_PID)"
     else
         log_warn "普通服务启动失败，但继续启动其他服务"
@@ -264,10 +259,10 @@ start_services() {
         --log_file ./logs/streaming_asr.log > ./logs/streaming_asr.out 2>&1 &
     STREAMING_ASR_PID=$!
     if [ $? -eq 0 ]; then
-        # 确保PID文件可写
-        touch ./logs/streaming_asr.pid 2>/dev/null || true
-        chmod 666 ./logs/streaming_asr.pid 2>/dev/null || true
-        echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid 2>/dev/null || true
+        # 使用更安全的方式写入PID文件
+        echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid 2>/dev/null || {
+            log_warn "无法写入 streaming_asr.pid 文件"
+        }
         log_info "流式ASR服务已启动 (PID: $STREAMING_ASR_PID)"
     else
         log_warn "流式ASR服务启动失败，但继续启动其他服务"
@@ -283,10 +278,10 @@ start_services() {
         --log_file ./logs/streaming_tts.log > ./logs/streaming_tts.out 2>&1 &
     STREAMING_TTS_PID=$!
     if [ $? -eq 0 ]; then
-        # 确保PID文件可写
-        touch ./logs/streaming_tts.pid 2>/dev/null || true
-        chmod 666 ./logs/streaming_tts.pid 2>/dev/null || true
-        echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid 2>/dev/null || true
+        # 使用更安全的方式写入PID文件
+        echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid 2>/dev/null || {
+            log_warn "无法写入 streaming_tts.pid 文件"
+        }
         log_info "流式TTS服务已启动 (PID: $STREAMING_TTS_PID)"
     else
         log_warn "流式TTS服务启动失败，但继续启动其他服务"
