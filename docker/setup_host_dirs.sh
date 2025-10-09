@@ -94,6 +94,12 @@ set_permissions() {
             # 设置目录权限为777，确保所有用户都可以读写
             chmod 777 "$full_path"
             log_info "设置权限 777: $full_path"
+            
+            # 在Debian系统中，确保目录所有权正确
+            if [ "$(id -u)" = "0" ]; then
+                # 如果是root用户，设置所有者为第一个非root用户（通常是1000）
+                chown -R 1000:1000 "$full_path" 2>/dev/null || true
+            fi
         fi
     done
 }
