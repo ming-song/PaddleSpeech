@@ -40,6 +40,8 @@ RUN apt-get update && apt-get install -y \
     vim \
     htop \
     bc \
+    libfst-dev \
+    libfst-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # 添加 NVIDIA GPG 密钥和仓库
@@ -97,6 +99,10 @@ RUN . ../venv/bin/activate && \
 # 编译安装 CTC 解码器
 RUN . ../venv/bin/activate && \
     cd third_party/ctc_decoders && \
+    # 确保OpenFST库和头文件路径正确
+    export CPLUS_INCLUDE_PATH=/usr/include/fst:$CPLUS_INCLUDE_PATH && \
+    export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LIBRARY_PATH && \
+    export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && \
     bash setup.sh && \
     python -m pip install .
 
