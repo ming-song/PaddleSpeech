@@ -212,18 +212,38 @@ clean_environment() {
     cd "$SCRIPT_DIR"
     docker compose -p paddlespeech down --remove-orphans
     
+    # 清理相关的Docker网络
+    log_info "清理Docker网络..."
+    if docker network ls | grep -q "paddlespeech-network"; then
+        docker network rm paddlespeech-network 2>/dev/null || true
+        log_info "已删除paddlespeech-network网络"
+    else
+        log_info "未找到paddlespeech-network网络"
+    fi
+    
+    # 清理相关的Docker数据卷
+    log_info "清理Docker数据卷..."
+    for volume in paddlespeech-redis paddlespeech-models paddlespeech-cache; do
+        if docker volume ls | grep -q "$volume"; then
+            docker volume rm "$volume" 2>/dev/null || true
+            log_info "已删除数据卷: $volume"
+        fi
+    done
+    
+    # 清理相关的容器
+    log_info "清理Docker容器..."
+    for container in paddlespeech-server paddlespeech-redis; do
+        if docker ps -a | grep -q "$container"; then
+            docker rm -f "$container" 2>/dev/null || true
+            log_info "已删除容器: $container"
+        fi
+    done
+    
     read -p "是否删除 Docker 镜像？[y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         docker image rm paddlespeech:latest || true
         log_info "Docker 镜像已删除"
-    fi
-    
-    read -p "是否删除数据卷？[y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        docker volume prune -f
-        log_info "数据卷已删除"
     fi
     
     log_success "环境清理完成"

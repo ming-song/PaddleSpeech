@@ -137,7 +137,7 @@ networks:
     name: paddlespeech-network
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.30.0.0/16
 
 # 数据卷配置（只保留模型和缓存的持久化存储）
 volumes:
