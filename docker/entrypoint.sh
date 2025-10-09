@@ -193,15 +193,30 @@ ensure_log_permissions() {
     # 创建日志目录
     mkdir -p logs
     
-    # 确保日志目录对当前用户可写
-    chmod 755 logs 2>/dev/null || true
+    # 设置宽松的权限以确保所有用户都可以读写
+    chmod 777 logs 2>/dev/null || true
     
-    # 如果日志文件存在，确保它们可写
-    for file in logs/*.out logs/*.log logs/*.pid; do
-        if [ -f "$file" ]; then
-            chmod 644 "$file" 2>/dev/null || true
-        fi
+    # 创建必要的日志文件并设置权限
+    local log_files=(
+        "logs/static.out"
+        "logs/static.pid"
+        "logs/server.out"
+        "logs/server.pid"
+        "logs/streaming_asr.out"
+        "logs/streaming_asr.pid"
+        "logs/streaming_tts.out"
+        "logs/streaming_tts.pid"
+    )
+    
+    for file in "${log_files[@]}"; do
+        # 创建文件（如果不存在）
+        touch "$file" 2>/dev/null || true
+        # 设置宽松权限
+        chmod 666 "$file" 2>/dev/null || true
     done
+    
+    # 确保目录权限正确
+    chmod 777 logs 2>/dev/null || true
 }
 
 # 启动服务（多服务模式）

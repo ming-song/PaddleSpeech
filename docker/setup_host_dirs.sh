@@ -91,6 +91,7 @@ set_permissions() {
     for dir in "${dirs[@]}"; do
         local full_path="$PROJECT_ROOT/$dir"
         if [ -d "$full_path" ]; then
+            # 设置目录权限为777，确保所有用户都可以读写
             chmod 777 "$full_path"
             log_info "设置权限 777: $full_path"
         fi
