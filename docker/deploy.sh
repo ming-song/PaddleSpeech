@@ -73,7 +73,7 @@ check_environment() {
         exit 1
     fi
     
-    if ! command -v docker-compose >/dev/null 2>&1 && ! docker compose version >/dev/null 2>&1; then
+    if ! command -v docker compose >/dev/null 2>&1; then
         log_error "Docker Compose 未安装"
         exit 1
     fi
@@ -96,7 +96,7 @@ build_image() {
     "$SCRIPT_DIR/setup_host_dirs.sh"
     
     cd "$SCRIPT_DIR"
-    docker-compose -p paddlespeech build
+    docker compose -p paddlespeech build
     
     log_success "镜像构建完成"
 }
@@ -133,13 +133,13 @@ start_service() {
     log_info "启动 PaddleSpeech 多服务架构..."
     
     cd "$SCRIPT_DIR"
-    docker-compose -p paddlespeech up -d
+    docker compose -p paddlespeech up -d
     
     # 等待服务启动
     log_info "所有服务启动中，等待60秒检查服务状态..."
     
     # 显示docker compose logs -f的输出，30秒后自动结束
-    timeout 60s docker-compose -p paddlespeech logs -f 2>&1 || true
+    timeout 60s docker compose -p paddlespeech logs -f 2>&1 || true
     
     check_service_status
     show_detailed_service_info
@@ -150,7 +150,7 @@ stop_service() {
     log_info "停止服务..."
     
     cd "$SCRIPT_DIR"
-    docker-compose -p paddlespeech down
+    docker compose -p paddlespeech down
     
     log_success "服务已停止"
 }
@@ -167,7 +167,7 @@ check_service_status() {
     log_info "检查多服务状态..."
     
     cd "$SCRIPT_DIR"
-    docker-compose -p paddlespeech ps
+    docker compose -p paddlespeech ps
     
     if docker ps | grep -q "paddlespeech-server"; then
         log_success "PaddleSpeech 容器运行正常"
@@ -202,7 +202,7 @@ show_logs() {
     log_info "查看服务日志..."
     
     cd "$SCRIPT_DIR"
-    docker-compose -p paddlespeech logs -f
+    docker compose -p paddlespeech logs -f
 }
 
 # 清理环境
@@ -210,7 +210,7 @@ clean_environment() {
     log_info "清理环境..."
     
     cd "$SCRIPT_DIR"
-    docker-compose -p paddlespeech down --remove-orphans
+    docker compose -p paddlespeech down --remove-orphans
     
     read -p "是否删除 Docker 镜像？[y/N] " -n 1 -r
     echo
