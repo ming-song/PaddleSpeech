@@ -52,19 +52,26 @@ apply_cors_patch() {
 check_gpu() {
     log_info "检查 GPU 可用性..."
     
-    if command -v nvidia-smi &> /dev/null; then
-        if nvidia-smi &> /dev/null; then
-            local gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader,nounits | head -1)
-            log_info "检测到 ${gpu_count} 个 GPU 设备"
-            nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
-            export PADDLESPEECH_DEVICE=gpu
-            export CUDA_VISIBLE_DEVICES=0
+    # 检查NVIDIA环境变量是否设置
+    if [ -n "$NVIDIA_VISIBLE_DEVICES" ] || [ -n "$CUDA_VISIBLE_DEVICES" ]; then
+        # 检查nvidia-smi是否可用
+        if command -v nvidia-smi &> /dev/null; then
+            if nvidia-smi &> /dev/null; then
+                local gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader,nounits | head -1)
+                log_info "检测到 ${gpu_count} 个 GPU 设备"
+                nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
+                export PADDLESPEECH_DEVICE=gpu
+                export CUDA_VISIBLE_DEVICES=0
+            else
+                log_warn "NVIDIA 驱动未正确安装或 GPU 不可用"
+                export PADDLESPEECH_DEVICE=cpu
+            fi
         else
-            log_warn "NVIDIA 驱动未正确安装或 GPU 不可用"
+            log_warn "nvidia-smi 命令不可用，使用 CPU 模式"
             export PADDLESPEECH_DEVICE=cpu
         fi
     else
-        log_warn "nvidia-smi 命令不可用，使用 CPU 模式"
+        log_warn "NVIDIA 环境变量未设置，使用 CPU 模式"
         export PADDLESPEECH_DEVICE=cpu
     fi
 }
@@ -179,6 +186,24 @@ EOF
     rm -f /tmp/preload_models.py
 }
 
+# 确保日志目录和文件权限正确
+ensure_log_permissions() {
+    log_info "确保日志目录权限正确..."
+    
+    # 创建日志目录
+    mkdir -p logs
+    
+    # 确保日志目录对当前用户可写
+    chmod 755 logs 2>/dev/null || true
+    
+    # 如果日志文件存在，确保它们可写
+    for file in logs/*.out logs/*.log logs/*.pid; do
+        if [ -f "$file" ]; then
+            chmod 644 "$file" 2>/dev/null || true
+        fi
+    done
+}
+
 # 启动服务（多服务模式）
 start_services() {
     local mode=${1:-all}
@@ -188,14 +213,17 @@ start_services() {
     cd /home/paddlespeech/PaddleSpeech
     source ../venv/bin/activate
     
-    # 创建日志目录
-    mkdir -p logs
+    # 确保日志权限正确
+    ensure_log_permissions
     
     # 启动静态文件服务器 (8093)
     log_info "启动静态文件服务器 - 端口 8093..."
     nohup python ./docker/static_server.py 8093 > ./logs/static.out 2>&1 &
     STATIC_PID=$!
     if [ $? -eq 0 ]; then
+        # 确保PID文件可写
+        touch ./logs/static.pid 2>/dev/null || true
+        chmod 644 ./logs/static.pid 2>/dev/null || true
         echo $STATIC_PID > ./logs/static.pid
         log_info "静态文件服务器已启动 (PID: $STATIC_PID)"
     else
@@ -212,6 +240,9 @@ start_services() {
         --log_file ./logs/server.log > ./logs/server.out 2>&1 &
     SERVER_PID=$!
     if [ $? -eq 0 ]; then
+        # 确保PID文件可写
+        touch ./logs/server.pid 2>/dev/null || true
+        chmod 644 ./logs/server.pid 2>/dev/null || true
         echo $SERVER_PID > ./logs/server.pid
         log_info "普通服务已启动 (PID: $SERVER_PID)"
     else
@@ -228,6 +259,9 @@ start_services() {
         --log_file ./logs/streaming_asr.log > ./logs/streaming_asr.out 2>&1 &
     STREAMING_ASR_PID=$!
     if [ $? -eq 0 ]; then
+        # 确保PID文件可写
+        touch ./logs/streaming_asr.pid 2>/dev/null || true
+        chmod 644 ./logs/streaming_asr.pid 2>/dev/null || true
         echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid
         log_info "流式ASR服务已启动 (PID: $STREAMING_ASR_PID)"
     else
@@ -244,6 +278,9 @@ start_services() {
         --log_file ./logs/streaming_tts.log > ./logs/streaming_tts.out 2>&1 &
     STREAMING_TTS_PID=$!
     if [ $? -eq 0 ]; then
+        # 确保PID文件可写
+        touch ./logs/streaming_tts.pid 2>/dev/null || true
+        chmod 644 ./logs/streaming_tts.pid 2>/dev/null || true
         echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid
         log_info "流式TTS服务已启动 (PID: $STREAMING_TTS_PID)"
     else
@@ -428,4 +465,5 @@ main() {
 }
 
 # 执行主函数
+main "$@"
 main "$@"

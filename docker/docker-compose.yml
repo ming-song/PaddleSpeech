@@ -25,6 +25,9 @@ services:
           memory: ${MEMORY_LIMIT:-8G}
           cpus: ${CPU_LIMIT:-4}
     
+    # 添加runtime配置以支持NVIDIA Container Toolkit
+    runtime: nvidia
+    
     # 环境变量优化（统一端口架构）
     environment:
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
@@ -85,6 +88,7 @@ services:
     logging:
       driver: "json-file"
       options:
+        max-size: "100m"
         max-size: "100m"
         max-file: "10"
     
