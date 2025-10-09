@@ -5,9 +5,25 @@
 echo "=== Docker 网络子网冲突检查 ==="
 echo
 
-# 定义PaddleSpeech将要使用的子网
-PADDLESPEECH_SUBNET="172.30.0.0/16"
-echo "PaddleSpeech计划使用子网: $PADDLESPEECH_SUBNET"
+# 从docker-compose.yml文件中动态获取PaddleSpeech将要使用的子网
+PADDLESPEECH_SUBNET=""
+
+if [ -f "docker-compose.yml" ]; then
+    # 使用更准确的方法解析subnet配置
+    PADDLESPEECH_SUBNET=$(grep -A 3 "ipam:" docker-compose.yml | grep "subnet:" | sed -E 's/.*subnet: *([0-9./]+).*/\1/' | head -1)
+    
+    if [ -n "$PADDLESPEECH_SUBNET" ]; then
+        echo "从docker-compose.yml解析到PaddleSpeech子网: $PADDLESPEECH_SUBNET"
+    else
+        # 如果还是找不到，使用默认值
+        PADDLESPEECH_SUBNET="172.40.0.0/16"
+        echo "警告: 无法从docker-compose.yml中解析子网，使用默认值: $PADDLESPEECH_SUBNET"
+    fi
+else
+    PADDLESPEECH_SUBNET="172.40.0.0/16"
+    echo "警告: 未找到docker-compose.yml文件，使用默认值: $PADDLESPEECH_SUBNET"
+fi
+
 echo
 
 # 获取所有现有网络的子网
@@ -17,8 +33,24 @@ echo "------------------------"
 CONFLICT_FOUND=false
 
 # 遍历所有网络
-for network in $(docker network ls --format "{{.Name}}" | grep -vE "bridge|host|none"); do
-    SUBNET=$(docker network inspect "$network" 2>/dev/null | grep -A 5 "IPAM" | grep "Subnet" | sed -E 's/.*"Subnet": "([^"]+)".*/\1/')
+docker_networks=$(docker network ls --format "{{.Name}}" 2>/dev/null)
+if [ $? -ne 0 ]; then
+    echo "错误: 无法获取Docker网络列表"
+    exit 1
+fi
+
+for network in $docker_networks; do
+    # 跳过默认网络
+    if [[ "$network" == "bridge" || "$network" == "host" || "$network" == "none" ]]; then
+        continue
+    fi
+    
+    network_info=$(docker network inspect "$network" 2>/dev/null)
+    if [ $? -ne 0 ]; then
+        continue
+    fi
+    
+    SUBNET=$(echo "$network_info" | grep -A 5 "IPAM" | grep "Subnet" | sed -E 's/.*"Subnet": "([^"]+)".*/\1/' | head -1)
     
     if [ -n "$SUBNET" ]; then
         echo "$network: $SUBNET"
