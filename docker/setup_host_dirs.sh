@@ -106,6 +106,12 @@ set_permissions() {
             
             # 确保目录内所有文件也有正确的权限
             chmod -R 777 "$full_path" 2>/dev/null || true
+            
+            # 特别处理日志目录，确保所有用户都可以写入
+            if [ "$dir" = "logs" ]; then
+                find "$full_path" -type f -exec chmod 666 {} \; 2>/dev/null || true
+                find "$full_path" -type d -exec chmod 777 {} \; 2>/dev/null || true
+            fi
         fi
     done
 }

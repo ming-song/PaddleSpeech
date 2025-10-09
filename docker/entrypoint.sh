@@ -52,72 +52,66 @@ apply_cors_patch() {
 check_gpu() {
     log_info "检查 GPU 可用性..."
     
-    # 检查NVIDIA环境变量是否设置
-    if [ -n "$NVIDIA_VISIBLE_DEVICES" ] || [ -n "$CUDA_VISIBLE_DEVICES" ]; then
-        # 检查nvidia-smi是否可用
-        if command -v nvidia-smi &> /dev/null; then
-            # 尝试运行nvidia-smi来检查GPU状态
-            if nvidia-smi -L &> /dev/null; then
-                local gpu_count=$(nvidia-smi -L | wc -l)
-                log_info "检测到 ${gpu_count} 个 GPU 设备"
-                nvidia-smi -L
-                export PADDLESPEECH_DEVICE=gpu
-                export CUDA_VISIBLE_DEVICES=0
-            else
-                # 在Debian系统中，尝试另一种方式检查GPU
-                if nvidia-smi &> /dev/null; then
-                    local gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader,nounits | head -1)
-                    if [ -n "$gpu_count" ] && [ "$gpu_count" -gt 0 ]; then
-                        log_info "检测到 ${gpu_count} 个 GPU 设备"
-                        nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
-                        export PADDLESPEECH_DEVICE=gpu
-                        export CUDA_VISIBLE_DEVICES=0
-                    else
-                        log_warn "未检测到可用的GPU设备"
-                        export PADDLESPEECH_DEVICE=cpu
-                    fi
-                else
-                    log_warn "NVIDIA 驱动未正确安装或 GPU 不可用"
-                    export PADDLESPEECH_DEVICE=cpu
-                fi
-            fi
+    # 首先检查NVIDIA Container Toolkit是否正确配置
+    if [ -f "/usr/bin/nvidia-smi" ] || [ -f "/usr/local/bin/nvidia-smi" ]; then
+        log_info "检测到 nvidia-smi 命令"
+        
+        # 检查NVIDIA环境变量是否设置
+        if [ -n "$NVIDIA_VISIBLE_DEVICES" ] || [ -n "$CUDA_VISIBLE_DEVICES" ]; then
+            log_info "检测到 NVIDIA 环境变量设置"
         else
-            log_warn "nvidia-smi 命令不可用，使用 CPU 模式"
-            export PADDLESPEECH_DEVICE=cpu
+            log_warn "未检测到 NVIDIA 环境变量，尝试设置默认值"
+            export NVIDIA_VISIBLE_DEVICES=all
+            export CUDA_VISIBLE_DEVICES=0
         fi
-    else
-        # 即使没有环境变量，也尝试检查GPU
-        if command -v nvidia-smi &> /dev/null && nvidia-smi -L &> /dev/null; then
+        
+        # 尝试运行nvidia-smi来检查GPU状态
+        if nvidia-smi -L &> /dev/null; then
             local gpu_count=$(nvidia-smi -L | wc -l)
             log_info "检测到 ${gpu_count} 个 GPU 设备"
             nvidia-smi -L
             export PADDLESPEECH_DEVICE=gpu
-            export CUDA_VISIBLE_DEVICES=0
         else
-            # 在Debian系统中，尝试另一种方式检查GPU
-            if command -v nvidia-smi &> /dev/null; then
+            # 尝试另一种方式检查GPU
+            if nvidia-smi --query-gpu=count --format=csv,noheader,nounits &> /dev/null; then
                 local gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader,nounits | head -1)
                 if [ -n "$gpu_count" ] && [ "$gpu_count" -gt 0 ]; then
                     log_info "检测到 ${gpu_count} 个 GPU 设备"
                     nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
                     export PADDLESPEECH_DEVICE=gpu
-                    export CUDA_VISIBLE_DEVICES=0
                 else
-                    log_warn "未检测到可用的GPU设备，使用 CPU 模式"
+                    log_warn "未检测到可用的GPU设备"
                     export PADDLESPEECH_DEVICE=cpu
                 fi
             else
-                # 最后尝试检查CUDA是否可用
-                if python -c "import paddle; print(paddle.is_compiled_with_cuda())" 2>/dev/null | grep -q "True"; then
-                    log_info "检测到CUDA可用，使用 GPU 模式"
-                    export PADDLESPEECH_DEVICE=gpu
-                    export CUDA_VISIBLE_DEVICES=0
-                else
-                    log_warn "NVIDIA 环境变量未设置，使用 CPU 模式"
-                    export PADDLESPEECH_DEVICE=cpu
-                fi
+                log_warn "NVIDIA 驱动未正确安装或 GPU 不可用"
+                export PADDLESPEECH_DEVICE=cpu
             fi
         fi
+    else
+        # 检查是否有CUDA库
+        if ldconfig -p | grep -q cuda; then
+            log_info "检测到 CUDA 库"
+            # 尝试检查CUDA是否可用
+            if python -c "import paddle; print(paddle.is_compiled_with_cuda())" 2>/dev/null | grep -q "True"; then
+                log_info "检测到CUDA可用，使用 GPU 模式"
+                export PADDLESPEECH_DEVICE=gpu
+                export CUDA_VISIBLE_DEVICES=0
+            else
+                log_warn "CUDA 不可用，使用 CPU 模式"
+                export PADDLESPEECH_DEVICE=cpu
+            fi
+        else
+            log_warn "未检测到 nvidia-smi 命令和 CUDA 库，使用 CPU 模式"
+            export PADDLESPEECH_DEVICE=cpu
+        fi
+    fi
+    
+    # 最终确认
+    if [ "$PADDLESPEECH_DEVICE" = "gpu" ]; then
+        log_info "GPU 模式已启用"
+    else
+        log_warn "使用 CPU 模式"
     fi
 }
 
@@ -238,8 +232,18 @@ ensure_log_permissions() {
     # 创建日志目录（如果不存在）
     mkdir -p logs 2>/dev/null || true
     
-    # 设置目录权限（使用更宽松的方式）
-    chmod 777 logs 2>/dev/null || true
+    # 在容器内，使用paddlespeech用户设置权限
+    # 首先尝试使用UID/GID设置权限
+    chown -R 1000:1000 logs 2>/dev/null || {
+        # 如果失败，尝试使用当前用户
+        chown -R $(id -u):$(id -g) logs 2>/dev/null || {
+            # 如果都失败，使用更宽松的方式
+            chmod -R 777 logs 2>/dev/null || true
+        }
+    }
+    
+    # 确保权限设置正确
+    chmod -R 777 logs 2>/dev/null || true
     
     # 创建必要的日志文件
     local log_files=(
@@ -255,15 +259,20 @@ ensure_log_permissions() {
     
     for file in "${log_files[@]}"; do
         # 创建文件（如果不存在）
-        touch "$file" 2>/dev/null || true
+        touch "$file" 2>/dev/null || {
+            # 如果touch失败，先确保目录存在
+            mkdir -p "$(dirname "$file")" 2>/dev/null || true
+            touch "$file" 2>/dev/null || true
+        }
+        
         # 设置文件权限
         chmod 666 "$file" 2>/dev/null || true
+        
+        # 设置文件所有权
+        chown 1000:1000 "$file" 2>/dev/null || {
+            chown $(id -u):$(id -g) "$file" 2>/dev/null || true
+        }
     done
-    
-    # 额外确保当前用户对目录有写权限（使用更兼容的方式）
-    # 在容器内，直接使用paddlespeech用户的UID和GID
-    chown -R 1000:1000 logs 2>/dev/null || true
-    chmod -R 777 logs 2>/dev/null || true
 }
 
 # 启动服务（多服务模式）
@@ -283,20 +292,27 @@ start_services() {
     
     # 启动静态文件服务器 (8093)
     log_info "启动静态文件服务器 - 端口 8093..."
+    
     # 使用更安全的方式重定向输出
-    nohup python ./docker/static_server.py 8093 > ./logs/static.out 2>&1 &
+    local static_log="./logs/static.out"
+    local static_pid="./logs/static.pid"
+    
+    # 确保日志文件可写
+    touch "$static_log" 2>/dev/null || true
+    chmod 666 "$static_log" 2>/dev/null || true
+    
+    # 启动服务并捕获PID
+    nohup python ./docker/static_server.py 8093 > "$static_log" 2>&1 &
     STATIC_PID=$!
-    if [ $? -eq 0 ]; then
+    
+    if [ $? -eq 0 ] && [ -n "$STATIC_PID" ]; then
         # 等待文件创建
-        sleep 3
-        # 使用更安全的方式写入PID文件
-        echo $STATIC_PID > ./logs/static.pid 2>/dev/null || {
+        sleep 2
+        # 确保PID文件可写
+        touch "$static_pid" 2>/dev/null || true
+        chmod 666 "$static_pid" 2>/dev/null || true
+        echo $STATIC_PID > "$static_pid" 2>/dev/null || {
             log_warn "无法写入 static.pid 文件"
-            # 尝试创建目录和文件
-            mkdir -p ./logs 2>/dev/null || true
-            touch ./logs/static.pid 2>/dev/null || true
-            chmod 666 ./logs/static.pid 2>/dev/null || true
-            echo $STATIC_PID > ./logs/static.pid 2>/dev/null || true
         }
         log_info "静态文件服务器已启动 (PID: $STATIC_PID)"
     else
@@ -308,21 +324,27 @@ start_services() {
     
     # 启动普通服务 (8090)
     log_info "启动普通服务 (ASR+TTS+CLS) - 端口 8090..."
+    
+    local server_log="./logs/server.out"
+    local server_pid="./logs/server.pid"
+    
+    # 确保日志文件可写
+    touch "$server_log" 2>/dev/null || true
+    chmod 666 "$server_log" 2>/dev/null || true
+    
     nohup paddlespeech_server start \
         --config_file ./docker/conf/application.yaml \
-        --log_file ./logs/server.log > ./logs/server.out 2>&1 &
+        --log_file ./logs/server.log > "$server_log" 2>&1 &
     SERVER_PID=$!
-    if [ $? -eq 0 ]; then
+    
+    if [ $? -eq 0 ] && [ -n "$SERVER_PID" ]; then
         # 等待文件创建
-        sleep 3
-        # 使用更安全的方式写入PID文件
-        echo $SERVER_PID > ./logs/server.pid 2>/dev/null || {
+        sleep 2
+        # 确保PID文件可写
+        touch "$server_pid" 2>/dev/null || true
+        chmod 666 "$server_pid" 2>/dev/null || true
+        echo $SERVER_PID > "$server_pid" 2>/dev/null || {
             log_warn "无法写入 server.pid 文件"
-            # 尝试创建目录和文件
-            mkdir -p ./logs 2>/dev/null || true
-            touch ./logs/server.pid 2>/dev/null || true
-            chmod 666 ./logs/server.pid 2>/dev/null || true
-            echo $SERVER_PID > ./logs/server.pid 2>/dev/null || true
         }
         log_info "普通服务已启动 (PID: $SERVER_PID)"
     else
@@ -334,21 +356,27 @@ start_services() {
     
     # 启动流式ASR服务 (8091)
     log_info "启动流式 ASR 服务 (WebSocket) - 端口 8091..."
+    
+    local asr_log="./logs/streaming_asr.out"
+    local asr_pid="./logs/streaming_asr.pid"
+    
+    # 确保日志文件可写
+    touch "$asr_log" 2>/dev/null || true
+    chmod 666 "$asr_log" 2>/dev/null || true
+    
     nohup paddlespeech_server start \
         --config_file ./docker/conf/streaming_asr_application.yaml \
-        --log_file ./logs/streaming_asr.log > ./logs/streaming_asr.out 2>&1 &
+        --log_file ./logs/streaming_asr.log > "$asr_log" 2>&1 &
     STREAMING_ASR_PID=$!
-    if [ $? -eq 0 ]; then
+    
+    if [ $? -eq 0 ] && [ -n "$STREAMING_ASR_PID" ]; then
         # 等待文件创建
-        sleep 3
-        # 使用更安全的方式写入PID文件
-        echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid 2>/dev/null || {
+        sleep 2
+        # 确保PID文件可写
+        touch "$asr_pid" 2>/dev/null || true
+        chmod 666 "$asr_pid" 2>/dev/null || true
+        echo $STREAMING_ASR_PID > "$asr_pid" 2>/dev/null || {
             log_warn "无法写入 streaming_asr.pid 文件"
-            # 尝试创建目录和文件
-            mkdir -p ./logs 2>/dev/null || true
-            touch ./logs/streaming_asr.pid 2>/dev/null || true
-            chmod 666 ./logs/streaming_asr.pid 2>/dev/null || true
-            echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid 2>/dev/null || true
         }
         log_info "流式ASR服务已启动 (PID: $STREAMING_ASR_PID)"
     else
@@ -358,23 +386,29 @@ start_services() {
     # 等待流式ASR服务启动
     sleep 20
     
-    # 启动流式TTS服务 (8092) - 重新启用进行测试
+    # 启动流式TTS服务 (8092)
     log_info "启动流式 TTS 服务 (HTTP) - 端口 8092..."
+    
+    local tts_log="./logs/streaming_tts.out"
+    local tts_pid="./logs/streaming_tts.pid"
+    
+    # 确保日志文件可写
+    touch "$tts_log" 2>/dev/null || true
+    chmod 666 "$tts_log" 2>/dev/null || true
+    
     nohup paddlespeech_server start \
         --config_file ./docker/conf/streaming_tts_application.yaml \
-        --log_file ./logs/streaming_tts.log > ./logs/streaming_tts.out 2>&1 &
+        --log_file ./logs/streaming_tts.log > "$tts_log" 2>&1 &
     STREAMING_TTS_PID=$!
-    if [ $? -eq 0 ]; then
+    
+    if [ $? -eq 0 ] && [ -n "$STREAMING_TTS_PID" ]; then
         # 等待文件创建
-        sleep 3
-        # 使用更安全的方式写入PID文件
-        echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid 2>/dev/null || {
+        sleep 2
+        # 确保PID文件可写
+        touch "$tts_pid" 2>/dev/null || true
+        chmod 666 "$tts_pid" 2>/dev/null || true
+        echo $STREAMING_TTS_PID > "$tts_pid" 2>/dev/null || {
             log_warn "无法写入 streaming_tts.pid 文件"
-            # 尝试创建目录和文件
-            mkdir -p ./logs 2>/dev/null || true
-            touch ./logs/streaming_tts.pid 2>/dev/null || true
-            chmod 666 ./logs/streaming_tts.pid 2>/dev/null || true
-            echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid 2>/dev/null || true
         }
         log_info "流式TTS服务已启动 (PID: $STREAMING_TTS_PID)"
     else
@@ -552,6 +586,14 @@ main() {
     # 预加载模型（可选）
     if [[ "${PRELOAD_MODELS:-true}" == "true" ]]; then
         preload_models
+    fi
+    
+    # 运行NVIDIA检测（仅在GPU模式下）
+    if [ "$PADDLESPEECH_DEVICE" = "gpu" ]; then
+        log_info "运行NVIDIA检测..."
+        if [ -f "/home/paddlespeech/check_nvidia.sh" ]; then
+            /home/paddlespeech/check_nvidia.sh > ./logs/nvidia_check.log 2>&1 || true
+        fi
     fi
     
     # 启动服务 - 使用 PaddleSpeech 原生服务器

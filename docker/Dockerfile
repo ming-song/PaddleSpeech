@@ -84,6 +84,12 @@ COPY --chown=paddlespeech:paddlespeech tools/ /home/paddlespeech/PaddleSpeech/to
 # 复制Docker相关文件（部分文件通过挂载提供）
 # entrypoint.sh, static_server.py, web/目录通过挂载提供
 
+# 复制NVIDIA检测脚本
+COPY --chown=paddlespeech:paddlespeech check_nvidia.sh /home/paddlespeech/check_nvidia.sh
+
+# 设置脚本权限
+RUN chmod +x /home/paddlespeech/check_nvidia.sh
+
 # 切换到源码目录
 WORKDIR /home/paddlespeech/PaddleSpeech
 

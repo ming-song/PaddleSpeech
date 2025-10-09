@@ -20,7 +20,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [gpu, compute, utility]
     
     # 添加runtime配置以支持NVIDIA Container Toolkit
     runtime: nvidia
@@ -28,7 +28,7 @@ services:
     # 环境变量优化（统一端口架构）
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - NVIDIA_DRIVER_CAPABILITIES=all
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONPATH=/home/paddlespeech/PaddleSpeech
       - PADDLESPEECH_GPU=true
@@ -61,6 +61,7 @@ services:
       - ./static_server.py:/home/paddlespeech/PaddleSpeech/docker/static_server.py  # 静态服务器脚本
       - ./web:/home/paddlespeech/PaddleSpeech/docker/web    # Web界面文件
       - ./patch_cors.py:/home/paddlespeech/patch_cors.py   # CORS修补脚本
+      - ./check_nvidia.sh:/home/paddlespeech/check_nvidia.sh  # NVIDIA检测脚本
       
       # 日志和运行时数据（与主机实时同步）
       - ./logs:/home/paddlespeech/PaddleSpeech/logs           # 日志目录（与主机同步）
