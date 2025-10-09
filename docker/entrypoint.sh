@@ -107,8 +107,15 @@ check_gpu() {
                     export PADDLESPEECH_DEVICE=cpu
                 fi
             else
-                log_warn "NVIDIA 环境变量未设置，使用 CPU 模式"
-                export PADDLESPEECH_DEVICE=cpu
+                # 最后尝试检查CUDA是否可用
+                if python -c "import paddle; print(paddle.is_compiled_with_cuda())" 2>/dev/null | grep -q "True"; then
+                    log_info "检测到CUDA可用，使用 GPU 模式"
+                    export PADDLESPEECH_DEVICE=gpu
+                    export CUDA_VISIBLE_DEVICES=0
+                else
+                    log_warn "NVIDIA 环境变量未设置，使用 CPU 模式"
+                    export PADDLESPEECH_DEVICE=cpu
+                fi
             fi
         fi
     fi
@@ -231,7 +238,7 @@ ensure_log_permissions() {
     # 创建日志目录（如果不存在）
     mkdir -p logs 2>/dev/null || true
     
-    # 设置目录权限（在Debian系统中使用更兼容的方式）
+    # 设置目录权限（使用更宽松的方式）
     chmod 777 logs 2>/dev/null || true
     
     # 创建必要的日志文件
@@ -253,14 +260,10 @@ ensure_log_permissions() {
         chmod 666 "$file" 2>/dev/null || true
     done
     
-    # 额外确保当前用户对目录有写权限（在Debian系统中更兼容的方式）
-    if [ "$(id -u)" = "0" ]; then
-        # 如果是root用户，设置所有者为paddlespeech用户
-        chown -R 1000:1000 logs 2>/dev/null || true
-    else
-        # 如果不是root用户，确保当前用户有权限
-        chown -R $(id -u):$(id -g) logs 2>/dev/null || true
-    fi
+    # 额外确保当前用户对目录有写权限（使用更兼容的方式）
+    # 在容器内，直接使用paddlespeech用户的UID和GID
+    chown -R 1000:1000 logs 2>/dev/null || true
+    chmod -R 777 logs 2>/dev/null || true
 }
 
 # 启动服务（多服务模式）
@@ -276,18 +279,24 @@ start_services() {
     ensure_log_permissions
     
     # 等待权限设置生效
-    sleep 2
+    sleep 3
     
     # 启动静态文件服务器 (8093)
     log_info "启动静态文件服务器 - 端口 8093..."
+    # 使用更安全的方式重定向输出
     nohup python ./docker/static_server.py 8093 > ./logs/static.out 2>&1 &
     STATIC_PID=$!
     if [ $? -eq 0 ]; then
         # 等待文件创建
-        sleep 2
+        sleep 3
         # 使用更安全的方式写入PID文件
         echo $STATIC_PID > ./logs/static.pid 2>/dev/null || {
             log_warn "无法写入 static.pid 文件"
+            # 尝试创建目录和文件
+            mkdir -p ./logs 2>/dev/null || true
+            touch ./logs/static.pid 2>/dev/null || true
+            chmod 666 ./logs/static.pid 2>/dev/null || true
+            echo $STATIC_PID > ./logs/static.pid 2>/dev/null || true
         }
         log_info "静态文件服务器已启动 (PID: $STATIC_PID)"
     else
@@ -305,10 +314,15 @@ start_services() {
     SERVER_PID=$!
     if [ $? -eq 0 ]; then
         # 等待文件创建
-        sleep 2
+        sleep 3
         # 使用更安全的方式写入PID文件
         echo $SERVER_PID > ./logs/server.pid 2>/dev/null || {
             log_warn "无法写入 server.pid 文件"
+            # 尝试创建目录和文件
+            mkdir -p ./logs 2>/dev/null || true
+            touch ./logs/server.pid 2>/dev/null || true
+            chmod 666 ./logs/server.pid 2>/dev/null || true
+            echo $SERVER_PID > ./logs/server.pid 2>/dev/null || true
         }
         log_info "普通服务已启动 (PID: $SERVER_PID)"
     else
@@ -316,7 +330,7 @@ start_services() {
     fi
     
     # 等待普通服务启动
-    sleep 15
+    sleep 20
     
     # 启动流式ASR服务 (8091)
     log_info "启动流式 ASR 服务 (WebSocket) - 端口 8091..."
@@ -326,10 +340,15 @@ start_services() {
     STREAMING_ASR_PID=$!
     if [ $? -eq 0 ]; then
         # 等待文件创建
-        sleep 2
+        sleep 3
         # 使用更安全的方式写入PID文件
         echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid 2>/dev/null || {
             log_warn "无法写入 streaming_asr.pid 文件"
+            # 尝试创建目录和文件
+            mkdir -p ./logs 2>/dev/null || true
+            touch ./logs/streaming_asr.pid 2>/dev/null || true
+            chmod 666 ./logs/streaming_asr.pid 2>/dev/null || true
+            echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid 2>/dev/null || true
         }
         log_info "流式ASR服务已启动 (PID: $STREAMING_ASR_PID)"
     else
@@ -337,7 +356,7 @@ start_services() {
     fi
     
     # 等待流式ASR服务启动
-    sleep 15
+    sleep 20
     
     # 启动流式TTS服务 (8092) - 重新启用进行测试
     log_info "启动流式 TTS 服务 (HTTP) - 端口 8092..."
@@ -347,10 +366,15 @@ start_services() {
     STREAMING_TTS_PID=$!
     if [ $? -eq 0 ]; then
         # 等待文件创建
-        sleep 2
+        sleep 3
         # 使用更安全的方式写入PID文件
         echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid 2>/dev/null || {
             log_warn "无法写入 streaming_tts.pid 文件"
+            # 尝试创建目录和文件
+            mkdir -p ./logs 2>/dev/null || true
+            touch ./logs/streaming_tts.pid 2>/dev/null || true
+            chmod 666 ./logs/streaming_tts.pid 2>/dev/null || true
+            echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid 2>/dev/null || true
         }
         log_info "流式TTS服务已启动 (PID: $STREAMING_TTS_PID)"
     else
@@ -359,7 +383,7 @@ start_services() {
     
     # 等待所有服务启动
     log_info "等待所有服务启动完成..."
-    sleep 40
+    sleep 50
     
     # 显示服务信息
     show_service_info

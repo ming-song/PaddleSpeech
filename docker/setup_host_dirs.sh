@@ -99,7 +99,13 @@ set_permissions() {
             if [ "$(id -u)" = "0" ]; then
                 # 如果是root用户，设置所有者为第一个非root用户（通常是1000）
                 chown -R 1000:1000 "$full_path" 2>/dev/null || true
+            else
+                # 如果不是root用户，确保当前用户有权限
+                chown -R $(id -u):$(id -g) "$full_path" 2>/dev/null || true
             fi
+            
+            # 确保目录内所有文件也有正确的权限
+            chmod -R 777 "$full_path" 2>/dev/null || true
         fi
     done
 }
