@@ -61,7 +61,6 @@ services:
       - ./static_server.py:/home/paddlespeech/PaddleSpeech/docker/static_server.py  # 静态服务器脚本
       - ./web:/home/paddlespeech/PaddleSpeech/docker/web    # Web界面文件
       - ./patch_cors.py:/home/paddlespeech/patch_cors.py   # CORS修补脚本
-      - ./check_nvidia.sh:/home/paddlespeech/check_nvidia.sh  # NVIDIA检测脚本
       
       # 日志和运行时数据（与主机实时同步）
       - ./logs:/home/paddlespeech/PaddleSpeech/logs           # 日志目录（与主机同步）
