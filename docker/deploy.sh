@@ -58,7 +58,7 @@ PaddleSpeech Docker 部署脚本 - 多服务架构
   普通语音服务:        http://localhost:8090
   流式语音识别服务:  ws://localhost:8091
   流式语音合成服务:  ws://localhost:8092
-  测试网页:          http://localhost:8090
+  测试网页:          http://localhost:8093
 
 配置文件: docker/.env
 EOF

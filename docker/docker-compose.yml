@@ -46,7 +46,7 @@ services:
       - "${SERVER_PORT:-8090}:8090"  # 普通服务端口（ASR+TTS+CLS）
       - "${STREAMING_ASR_PORT:-8091}:8091"  # 流式ASR服务端口
       - "${STREAMING_TTS_PORT:-8092}:8092"  # 流式TTS服务端口
-      - "8093:8093"  # 静态文件服务端口
+      - "${STATIC_FILE_PORT:-8093}:8093"  # 静态文件服务端口
     
     # 数据卷挂载（模型、配置、日志的完整挂载策略）
     volumes:
