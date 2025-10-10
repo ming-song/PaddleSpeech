@@ -44,19 +44,19 @@ RUN apt-get update && apt-get install -y \
     libfst-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# 添加 NVIDIA GPG 密钥和仓库
+# 添加 NVIDIA GPG 密钥和仓库 (使用575.x兼容的版本)
 RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb \
     && dpkg -i cuda-keyring_1.1-1_all.deb \
     && rm cuda-keyring_1.1-1_all.deb
 
-# 安装 CUDA 12.9 工具包
+# 安装与驱动575.57.08兼容的CUDA工具包
 RUN apt-get update && apt-get install -y \
-    cuda-toolkit-12-9 \
-    cuda-drivers \
+    cuda-toolkit-12-4 \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建符号链接
-RUN ln -sf /usr/local/cuda-12.9 /usr/local/cuda
+RUN ln -sf /usr/local/cuda-12.4 /usr/local/cuda \
+    && ln -sf /usr/local/cuda-12.4 /usr/local/cuda-12.9
 
 # 创建用户和虚拟环境
 RUN useradd -m -s /bin/bash paddlespeech && \

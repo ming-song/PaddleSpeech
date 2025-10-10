@@ -25,6 +25,12 @@ services:
     # 添加runtime配置以支持NVIDIA Container Toolkit
     runtime: nvidia
     
+    # 添加设备映射以支持GPU访问
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+    
     # 环境变量优化（统一端口架构）
     environment:
       - NVIDIA_VISIBLE_DEVICES=all

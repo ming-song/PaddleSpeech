@@ -65,29 +65,32 @@ check_gpu() {
             export CUDA_VISIBLE_DEVICES=0
         fi
         
-        # 尝试运行nvidia-smi来检查GPU状态
-        if nvidia-smi -L &> /dev/null; then
-            local gpu_count=$(nvidia-smi -L | wc -l)
-            log_info "检测到 ${gpu_count} 个 GPU 设备"
-            nvidia-smi -L
-            export PADDLESPEECH_DEVICE=gpu
-        else
-            # 尝试另一种方式检查GPU
-            if nvidia-smi --query-gpu=count --format=csv,noheader,nounits &> /dev/null; then
-                local gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader,nounits | head -1)
-                if [ -n "$gpu_count" ] && [ "$gpu_count" -gt 0 ]; then
-                    log_info "检测到 ${gpu_count} 个 GPU 设备"
-                    nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
-                    export PADDLESPEECH_DEVICE=gpu
-                else
-                    log_warn "未检测到可用的GPU设备"
-                    export PADDLESPEECH_DEVICE=cpu
-                fi
+        # 绕过nvidia-smi的NVML版本不匹配问题，直接测试GPU可用性
+        log_info "检测GPU可用性（绕过NVML版本检查）..."
+
+        # 1. 检查设备文件存在性
+        if [ -c "/dev/nvidia0" ] && [ -c "/dev/nvidiactl" ]; then
+            log_info "✓ 检测到NVIDIA设备文件"
+
+            # 2. 检查环境变量配置
+            if [ -n "$NVIDIA_VISIBLE_DEVICES" ] && [ "$NVIDIA_VISIBLE_DEVICES" != "none" ]; then
+                log_info "✓ NVIDIA环境变量配置正确"
+
+                # 3. 直接设置为GPU模式，稍后通过PaddlePaddle验证
+                log_info "✓ 启用GPU模式 (将通过PaddlePaddle验证CUDA可用性)"
+                export PADDLESPEECH_DEVICE=gpu
+                return 0
             else
-                log_warn "NVIDIA 驱动未正确安装或 GPU 不可用"
-                export PADDLESPEECH_DEVICE=cpu
+                log_warn "NVIDIA环境变量未配置，强制设置"
+                export NVIDIA_VISIBLE_DEVICES=all
+                export CUDA_VISIBLE_DEVICES=0
+                export PADDLESPEECH_DEVICE=gpu
+                return 0
             fi
         fi
+
+        log_warn "GPU设备文件不存在，使用CPU模式"
+        export PADDLESPEECH_DEVICE=cpu
     else
         # 检查是否有CUDA库
         if ldconfig -p | grep -q cuda; then
@@ -198,16 +201,47 @@ import sys
 sys.path.insert(0, '/home/paddlespeech/PaddleSpeech')
 
 try:
+    # 验证GPU可用性
+    if os.environ.get('PADDLESPEECH_DEVICE') == 'gpu':
+        print("验证GPU可用性...")
+        import paddle
+
+        # 检查CUDA是否编译支持
+        if paddle.is_compiled_with_cuda():
+            print("✓ PaddlePaddle支持CUDA")
+
+            # 尝试设置GPU设备
+            try:
+                paddle.device.set_device('gpu:0')
+                # 创建一个简单的tensor测试GPU
+                x = paddle.ones([2, 2])
+                y = x + 1
+                print(f"✓ GPU测试成功: {y.place}")
+                print("✓ GPU模式验证通过")
+            except Exception as gpu_error:
+                print(f"⚠ GPU测试失败: {gpu_error}")
+                print("⚠ 降级到CPU模式")
+                os.environ['PADDLESPEECH_DEVICE'] = 'cpu'
+                paddle.device.set_device('cpu')
+        else:
+            print("⚠ PaddlePaddle未编译CUDA支持，使用CPU模式")
+            os.environ['PADDLESPEECH_DEVICE'] = 'cpu'
+            paddle.device.set_device('cpu')
+    else:
+        print("使用CPU模式")
+        import paddle
+        paddle.device.set_device('cpu')
+
     print("初始化 ASR 模型...")
     from paddlespeech.cli.asr.infer import ASRExecutor
     asr = ASRExecutor()
     print("✓ ASR 模型加载成功")
-    
+
     print("初始化 TTS 模型...")
     from paddlespeech.cli.tts.infer import TTSExecutor
     tts = TTSExecutor()
     print("✓ TTS 模型加载成功")
-    
+
     print("模型预加载完成")
 
 except Exception as e:
@@ -233,9 +267,9 @@ ensure_log_permissions() {
     mkdir -p logs 2>/dev/null || true
     
     # 在容器内，使用paddlespeech用户设置权限
-    # 首先尝试使用UID/GID设置权限
-    chown -R 1000:1000 logs 2>/dev/null || {
-        # 如果失败，尝试使用当前用户
+    # 首先确保目录存在并设置权限
+    sudo chown -R paddlespeech:paddlespeech logs 2>/dev/null || {
+        # 如果sudo失败，尝试直接设置权限
         chown -R $(id -u):$(id -g) logs 2>/dev/null || {
             # 如果都失败，使用更宽松的方式
             chmod -R 777 logs 2>/dev/null || true
@@ -244,6 +278,13 @@ ensure_log_permissions() {
     
     # 确保权限设置正确
     chmod -R 777 logs 2>/dev/null || true
+    
+    # 同时处理uploads和outputs目录
+    for dir in uploads outputs; do
+        if [ -d "$dir" ]; then
+            sudo chown -R paddlespeech:paddlespeech "$dir" 2>/dev/null || chmod -R 777 "$dir" 2>/dev/null || true
+        fi
+    done
     
     # 创建必要的日志文件
     local log_files=(
