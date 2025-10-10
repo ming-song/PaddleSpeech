@@ -12,9 +12,70 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化播放速度控制器
     setupSpeedControl();
 
+    // 初始化服务地址配置
+    initServiceConfig();
+
     // 显示默认标签页
     switchTab('realtime-asr');
 });
+
+// 初始化服务地址配置
+function initServiceConfig() {
+    console.log('初始化服务地址配置...');
+    
+    // 获取当前页面的协议、主机和端口
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    const baseUrl = `${protocol}//${hostname}${port}`;
+    
+    // 设置默认值
+    const defaultUrls = {
+        'asr-http-url': `${baseUrl.replace(/:\d+$/, ':8090')}`,  // 默认8090端口
+        'asr-ws-url': `ws://${hostname}:8091`,  // WebSocket使用ws协议
+        'tts-http-url': `${baseUrl.replace(/:\d+$/, ':8090')}`,  // 默认8090端口
+        'tts-ws-url': `ws://${hostname}:8092`   // WebSocket使用ws协议
+    };
+    
+    // 为每个配置项设置默认值
+    Object.keys(defaultUrls).forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            // 如果本地存储中有值，则使用存储的值，否则使用默认值
+            const storedValue = localStorage.getItem(id);
+            input.value = storedValue || defaultUrls[id];
+            
+            // 添加事件监听器，保存用户修改的值
+            input.addEventListener('change', function() {
+                localStorage.setItem(id, this.value);
+            });
+        }
+    });
+    
+    console.log('服务地址配置初始化完成');
+}
+
+// 重置配置为默认值
+function resetConfig() {
+    if (confirm('确定要重置所有服务地址配置为默认值吗？')) {
+        // 清除本地存储
+        const configIds = ['asr-http-url', 'asr-ws-url', 'tts-http-url', 'tts-ws-url'];
+        configIds.forEach(id => {
+            localStorage.removeItem(id);
+        });
+        
+        // 重新初始化配置
+        initServiceConfig();
+        
+        alert('配置已重置为默认值');
+    }
+}
+
+// 获取配置的服务地址
+function getServiceUrl(configId) {
+    const input = document.getElementById(configId);
+    return input ? input.value : null;
+}
 
 // 切换标签页
 function switchTab(tabId) {
@@ -98,7 +159,18 @@ function setupSpeedControl() {
 // WebSocket连接
 function connectWebSocket() {
     console.log('尝试连接WebSocket...');
-    const wsUrl = `ws://localhost:8091/paddlespeech/asr/streaming`;
+    
+    // 使用配置的WebSocket URL
+    const wsUrl = getServiceUrl('asr-ws-url');
+    if (!wsUrl) {
+        alert('请先配置实时ASR服务地址');
+        return;
+    }
+    
+    // 确保URL以正确的路径结尾
+    const fullWsUrl = wsUrl.endsWith('/paddlespeech/asr/streaming') ? 
+        wsUrl : 
+        `${wsUrl.replace(/\/$/, '')}/paddlespeech/asr/streaming`;
     
     // 关闭已存在的连接
     if (websocket) {
@@ -106,7 +178,7 @@ function connectWebSocket() {
     }
     
     try {
-        websocket = new WebSocket(wsUrl);
+        websocket = new WebSocket(fullWsUrl);
         
         websocket.onopen = function() {
             console.log('WebSocket连接成功');
@@ -327,6 +399,18 @@ async function uploadForASR() {
     
     const file = fileInput.files[0];
     
+    // 获取配置的HTTP服务地址
+    const httpUrl = getServiceUrl('asr-http-url');
+    if (!httpUrl) {
+        alert('请先配置文件ASR服务地址');
+        return;
+    }
+    
+    // 构造完整的API URL
+    const apiUrl = httpUrl.endsWith('/paddlespeech/asr') ? 
+        httpUrl : 
+        `${httpUrl.replace(/\/$/, '')}/paddlespeech/asr`;
+    
     try {
         resultEl.textContent = '正在处理文件...';
         
@@ -347,7 +431,7 @@ async function uploadForASR() {
         
         resultEl.textContent = '正在上传和识别...';
         
-        const response = await fetch('http://localhost:8090/paddlespeech/asr', {
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -412,6 +496,18 @@ async function synthesizeText() {
         return;
     }
 
+    // 获取配置的HTTP服务地址
+    const httpUrl = getServiceUrl('tts-http-url');
+    if (!httpUrl) {
+        alert('请先配置TTS服务地址');
+        return;
+    }
+    
+    // 构造完整的API URL
+    const apiUrl = httpUrl.endsWith('/paddlespeech/tts') ? 
+        httpUrl : 
+        `${httpUrl.replace(/\/$/, '')}/paddlespeech/tts`;
+
     try {
         resultEl.innerHTML = '<p>正在合成语音...</p>';
         audioEl.style.display = 'none';
@@ -429,7 +525,7 @@ async function synthesizeText() {
             sample_rate: 0  // 0表示使用模型默认采样率
         };
 
-        const response = await fetch('http://localhost:8090/paddlespeech/tts', {
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -656,7 +752,18 @@ function connectTTSWebSocket() {
     const synthesizeBtn = document.getElementById('streaming-synthesize-btn');
     
     console.log('尝试连接TTS WebSocket...');
-    const wsUrl = 'ws://localhost:8092/paddlespeech/tts/streaming';
+    
+    // 使用配置的WebSocket URL
+    const wsUrl = getServiceUrl('tts-ws-url');
+    if (!wsUrl) {
+        alert('请先配置流式TTS服务地址');
+        return;
+    }
+    
+    // 确保URL以正确的路径结尾
+    const fullWsUrl = wsUrl.endsWith('/paddlespeech/tts/streaming') ? 
+        wsUrl : 
+        `${wsUrl.replace(/\/$/, '')}/paddlespeech/tts/streaming`;
     
     // 更新状态
     statusEl.textContent = '连接中...';
@@ -669,7 +776,7 @@ function connectTTSWebSocket() {
     }
     
     try {
-        ttsWebsocket = new WebSocket(wsUrl);
+        ttsWebsocket = new WebSocket(fullWsUrl);
         
         ttsWebsocket.onopen = function() {
             console.log('TTS WebSocket连接成功');

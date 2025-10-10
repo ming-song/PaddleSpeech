@@ -14,6 +14,30 @@
             <p>支持实时录音识别、文件上传转换、语音合成等功能</p>
         </div>
 
+        <!-- 服务地址配置区域 -->
+        <div class="config-section">
+            <h3>⚙️ 服务地址配置</h3>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label for="asr-http-url">文件ASR服务地址:</label>
+                    <input type="text" id="asr-http-url" placeholder="http://localhost:8090">
+                </div>
+                <div class="config-item">
+                    <label for="asr-ws-url">实时ASR服务地址:</label>
+                    <input type="text" id="asr-ws-url" placeholder="ws://localhost:8091">
+                </div>
+                <div class="config-item">
+                    <label for="tts-http-url">TTS服务地址:</label>
+                    <input type="text" id="tts-http-url" placeholder="http://localhost:8090">
+                </div>
+                <div class="config-item">
+                    <label for="tts-ws-url">流式TTS服务地址:</label>
+                    <input type="text" id="tts-ws-url" placeholder="ws://localhost:8092">
+                </div>
+            </div>
+            <button class="btn btn-secondary" onclick="resetConfig()">重置默认配置</button>
+        </div>
+
         <div class="service-tabs">
             <button class="tab-button active" onclick="switchTab('realtime-asr')">实时语音识别</button>
             <button class="tab-button" onclick="switchTab('file-asr')">文件语音识别</button>
