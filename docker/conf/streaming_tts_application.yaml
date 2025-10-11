@@ -6,12 +6,16 @@
 host: 0.0.0.0
 port: 8092
 
-# The task format in the engin_list is: <speech task>_<engine type>
+# 同时支持websocket和http协议
 # engine_list choices = ['tts_online', 'tts_online-onnx'], the inference speed of tts_online-onnx is faster than tts_online.
 # protocol choices = ['websocket', 'http'] 
-protocol: 'websocket'
+protocol: 'http'  # 修改为http以支持采样率获取接口
 engine_list: ['tts_online-onnx']
 
+# 添加额外的WebSocket端点配置
+websocket:
+  endpoint: '/paddlespeech/tts/streaming'
+  enabled: true
 
 #################################################################################
 #                                ENGINE CONFIG                                  #
@@ -100,4 +104,3 @@ tts_online-onnx:
     voc_pad: 14
     # voc_upsample should be same as n_shift on voc config.
     voc_upsample: 300
-    

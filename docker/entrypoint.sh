@@ -397,60 +397,34 @@ start_services() {
     
     # 启动流式ASR服务 (8091)
     log_info "启动流式 ASR 服务 (WebSocket) - 端口 8091..."
-    
-    local asr_log="./logs/streaming_asr.out"
-    local asr_pid="./logs/streaming_asr.pid"
-    
-    # 确保日志文件可写
-    touch "$asr_log" 2>/dev/null || true
-    chmod 666 "$asr_log" 2>/dev/null || true
-    
     nohup paddlespeech_server start \
         --config_file ./docker/conf/streaming_asr_application.yaml \
-        --log_file ./logs/streaming_asr.log > "$asr_log" 2>&1 &
+        --log_file ./logs/streaming_asr.log > ./logs/streaming_asr.out 2>&1 &
     STREAMING_ASR_PID=$!
-    
-    if [ $? -eq 0 ] && [ -n "$STREAMING_ASR_PID" ]; then
-        # 等待文件创建
-        sleep 2
+    if [ $? -eq 0 ]; then
         # 确保PID文件可写
-        touch "$asr_pid" 2>/dev/null || true
-        chmod 666 "$asr_pid" 2>/dev/null || true
-        echo $STREAMING_ASR_PID > "$asr_pid" 2>/dev/null || {
-            log_warn "无法写入 streaming_asr.pid 文件"
-        }
+        touch ./logs/streaming_asr.pid 2>/dev/null || true
+        chmod 666 ./logs/streaming_asr.pid 2>/dev/null || true
+        echo $STREAMING_ASR_PID > ./logs/streaming_asr.pid
         log_info "流式ASR服务已启动 (PID: $STREAMING_ASR_PID)"
     else
         log_warn "流式ASR服务启动失败，但继续启动其他服务"
     fi
     
     # 等待流式ASR服务启动
-    sleep 20
+    sleep 10
     
-    # 启动流式TTS服务 (8092)
-    log_info "启动流式 TTS 服务 (HTTP) - 端口 8092..."
-    
-    local tts_log="./logs/streaming_tts.out"
-    local tts_pid="./logs/streaming_tts.pid"
-    
-    # 确保日志文件可写
-    touch "$tts_log" 2>/dev/null || true
-    chmod 666 "$tts_log" 2>/dev/null || true
-    
+    # 启动流式TTS服务 (8092) - 支持HTTP和WebSocket协议
+    log_info "启动流式 TTS 服务 (HTTP/WebSocket) - 端口 8092..."
     nohup paddlespeech_server start \
         --config_file ./docker/conf/streaming_tts_application.yaml \
-        --log_file ./logs/streaming_tts.log > "$tts_log" 2>&1 &
+        --log_file ./logs/streaming_tts.log > ./logs/streaming_tts.out 2>&1 &
     STREAMING_TTS_PID=$!
-    
-    if [ $? -eq 0 ] && [ -n "$STREAMING_TTS_PID" ]; then
-        # 等待文件创建
-        sleep 2
+    if [ $? -eq 0 ]; then
         # 确保PID文件可写
-        touch "$tts_pid" 2>/dev/null || true
-        chmod 666 "$tts_pid" 2>/dev/null || true
-        echo $STREAMING_TTS_PID > "$tts_pid" 2>/dev/null || {
-            log_warn "无法写入 streaming_tts.pid 文件"
-        }
+        touch ./logs/streaming_tts.pid 2>/dev/null || true
+        chmod 666 ./logs/streaming_tts.pid 2>/dev/null || true
+        echo $STREAMING_TTS_PID > ./logs/streaming_tts.pid
         log_info "流式TTS服务已启动 (PID: $STREAMING_TTS_PID)"
     else
         log_warn "流式TTS服务启动失败，但继续启动其他服务"
@@ -458,7 +432,7 @@ start_services() {
     
     # 等待所有服务启动
     log_info "等待所有服务启动完成..."
-    sleep 50
+    sleep 30
     
     # 显示服务信息
     show_service_info
@@ -485,13 +459,14 @@ show_service_info() {
     # 检查服务状态
     check_service_status "8090" "普通服务 (ASR+TTS+CLS)"
     check_service_status "8091" "流式 ASR 服务 (WebSocket)"
-    check_service_status "8092" "流式 TTS 服务 (HTTP)"
+    check_service_status "8092" "流式 TTS 服务 (HTTP/WebSocket)"
     
     echo ""
     log_green "服务访问地址:"
     echo "  普通服务:     http://localhost:8090"
     echo "  流式 ASR:      ws://localhost:8091"
-    echo "  流式 TTS:      http://localhost:8092"
+    echo "  流式 TTS:      http://localhost:8092 (HTTP采样率接口)"
+    echo "  流式 TTS:      ws://localhost:8092/paddlespeech/tts/streaming (WebSocket流式传输)"
     echo "  测试网页:     http://localhost:8093"
     echo ""
     
@@ -505,8 +480,11 @@ show_service_info() {
     echo "  # 普通 TTS"
     echo "  paddlespeech_client tts --server_ip localhost --port 8090 --input '你好' --output output.wav"
     echo ""
-    echo "  # 流式 TTS"
-    echo "  paddlespeech_client tts_online --server_ip localhost --port 8092 --input '你好' --output output.wav"
+    echo "  # 流式 TTS (WebSocket)"
+    echo "  paddlespeech_client tts_online --server_ip localhost --port 8092 --protocol websocket --input '你好' --output output.wav"
+    echo ""
+    echo "  # 流式 TTS (HTTP)"
+    echo "  paddlespeech_client tts_online --server_ip localhost --port 8092 --protocol http --input '你好' --output output.wav"
     echo ""
     
     log_blue "============================="
